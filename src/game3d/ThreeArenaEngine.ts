@@ -9,9 +9,11 @@ import {
   RealWorldEnvironment,
   CreatureElement,
   CombatDNA,
-  DerivedMechanic
+  DerivedMechanic,
+  WeaponSkillType
 } from '../types/creature';
 import { Creature3DBuilder, Creature3DModel } from './Creature3DBuilder';
+import { getCreatureWeaponType, createWeaponProjectileMesh, WEAPON_SKILL_METAS } from './weaponSkillConfig';
 import { RIVAL_OBJECT_CREATURES } from '../data/creaturePresets';
 import { detectRealWorldEnvironment } from '../data/environmentPresets';
 import { deriveCombatDna } from '../utils/combatDnaDerivation';
@@ -63,6 +65,7 @@ export interface ArenaHUDState {
   }>;
   playerRotation?: number;
   recentCombatLog: string[];
+  playerWeaponType?: WeaponSkillType;
   // Real-World Hackathon Additions
   currentEnvironment: RealWorldEnvironment;
   kineticCharge: number;
@@ -136,7 +139,7 @@ export class ThreeArenaEngine {
 
   // Combat Entities
   private projectiles: AttackProjectile[] = [];
-  private projectileMeshes: Map<string, THREE.Mesh> = new Map();
+  private projectileMeshes: Map<string, THREE.Object3D> = new Map();
   private pickups: ArenaPickup[] = [];
   private pickupMeshes: Map<string, THREE.Mesh> = new Map();
   public damageFloaters: DamageFloater[] = [];
@@ -154,6 +157,8 @@ export class ThreeArenaEngine {
   public isAbilityPressed = false;
   public isDashPressed = false;
   public isJumpPressed = false;
+  private lastAbilityWasPressed = false;
+  private lastAbilityWarningTime = 0;
 
   // Callbacks
   private onHUDUpdateCallback?: (state: ArenaHUDState) => void;
@@ -964,11 +969,18 @@ export class ThreeArenaEngine {
           this.playerFighter.knockbackVz = (this.playerFighter.knockbackVz || 0) * Math.max(0, 1 - 10 * dt);
         }
 
-        // Vertical jump & gravity physics
+        // Vertical jump & gravity physics (High heroic leap to dodge attacks)
         if (this.playerFighter.y > 0 || (this.playerFighter.jumpVelocityY && this.playerFighter.jumpVelocityY !== 0)) {
-          const gravity = 34;
+          const gravity = 36;
           this.playerFighter.jumpVelocityY = (this.playerFighter.jumpVelocityY || 0) - gravity * dt;
           this.playerFighter.y = Math.max(0, this.playerFighter.y + this.playerFighter.jumpVelocityY * dt);
+
+          // Agile mid-air steering (air control) while leaping over attacks
+          if (Math.abs(this.inputVector.x) > 0.05 || Math.abs(this.inputVector.z) > 0.05) {
+            this.playerFighter.x += this.inputVector.x * speed * 0.85 * dt;
+            this.playerFighter.z += this.inputVector.z * speed * 0.85 * dt;
+          }
+
           if (this.playerFighter.y <= 0) {
             this.playerFighter.y = 0;
             this.playerFighter.jumpVelocityY = 0;
@@ -1002,24 +1014,40 @@ export class ThreeArenaEngine {
           this.playerFighter.attackCooldown = Math.max(0.08, baseAttackInterval / this.forgeBonuses.fireRateMultiplier);
         }
 
-        // Actions: Special Ability (locked if silenced)
-        if (this.isAbilityPressed && this.playerFighter.abilityCooldown <= 0) {
-          if (this.playerFighter.silenceDuration && this.playerFighter.silenceDuration > 0) {
+        // Actions: Special Ability / Skill (Activated by pressing X or clicking HUD button)
+        if (this.isAbilityPressed) {
+          if (this.playerFighter.abilityCooldown <= 0) {
+            if (this.playerFighter.silenceDuration && this.playerFighter.silenceDuration > 0) {
+              this.damageFloaters.push({
+                id: `floater-silenced-${Date.now()}`,
+                text: 'SYSTEM SILENCED!',
+                x: this.playerFighter.x,
+                y: 3.5,
+                z: this.playerFighter.z,
+                color: '#EF4444',
+                isCrit: false,
+                opacity: 1.0,
+              });
+            } else {
+              this.executeSpecialAbility(this.playerFighter);
+              const baseCd = this.playerFighter.creature.specialAbility?.cooldown || 6.0;
+              this.playerFighter.abilityCooldown = baseCd * this.forgeBonuses.specialCdFactor;
+            }
+          } else if (!this.lastAbilityWasPressed && Date.now() - this.lastAbilityWarningTime > 800) {
+            this.lastAbilityWarningTime = Date.now();
             this.damageFloaters.push({
-              id: `floater-silenced-${Date.now()}`,
-              text: 'SYSTEM SILENCED!',
+              id: `floater-cd-${Date.now()}`,
+              text: `⚡ RECHARGING (${Math.ceil(this.playerFighter.abilityCooldown)}s)`,
               x: this.playerFighter.x,
               y: 3.5,
               z: this.playerFighter.z,
-              color: '#EF4444',
+              color: '#FBBF24',
               isCrit: false,
               opacity: 1.0,
             });
-          } else {
-            this.executeSpecialAbility(this.playerFighter);
-            this.playerFighter.abilityCooldown = this.playerFighter.creature.specialAbility.cooldown * this.forgeBonuses.specialCdFactor;
           }
         }
+        this.lastAbilityWasPressed = this.isAbilityPressed;
 
         // Actions: Evade Dash - modulated by Combat DNA acceleration
         if (this.isDashPressed && this.playerFighter.dashCooldown <= 0) {
@@ -1060,6 +1088,16 @@ export class ThreeArenaEngine {
       if (f.attackCooldown > 0) f.attackCooldown = Math.max(0, f.attackCooldown - dt);
       if (f.abilityCooldown > 0) f.abilityCooldown = Math.max(0, f.abilityCooldown - dt);
       if (f.dashCooldown > 0) f.dashCooldown = Math.max(0, f.dashCooldown - dt);
+
+      // Hit reaction timer (auto-clears isHit so mechs never vibrate continuously)
+      if (f.hitTimer && f.hitTimer > 0) {
+        f.hitTimer -= dt;
+        if (f.hitTimer <= 0) {
+          f.isHit = false;
+        }
+      } else {
+        f.isHit = false;
+      }
 
       // Invulnerability i-frame cooldown
       if (f.invulnerabilityTimer && f.invulnerabilityTimer > 0) {
@@ -1108,10 +1146,53 @@ export class ThreeArenaEngine {
     // 6. Check Pickup Collisions
     this.checkPickups();
 
+    // 6b. Fighter-Fighter Soft Collision Separation (prevents mechs from overlapping and oscillating/vibrating)
+    for (let i = 0; i < this.fighters.length; i++) {
+      const f1 = this.fighters[i];
+      if (f1.isDead) continue;
+      for (let j = i + 1; j < this.fighters.length; j++) {
+        const f2 = this.fighters[j];
+        if (f2.isDead) continue;
+        const dx = f2.x - f1.x;
+        const dz = f2.z - f1.z;
+        const distSq = dx * dx + dz * dz;
+        const minDistance = 2.4;
+        if (distSq < minDistance * minDistance) {
+          const dist = Math.sqrt(distSq);
+          const safeDist = dist < 0.001 ? 0.001 : dist;
+          const overlap = minDistance - safeDist;
+          const nx = dist < 0.001 ? 1 : dx / safeDist;
+          const nz = dist < 0.001 ? 0 : dz / safeDist;
+          const push = overlap * 0.5;
+          f1.x -= nx * push;
+          f1.z -= nz * push;
+          f2.x += nx * push;
+          f2.z += nz * push;
+        }
+      }
+    }
+
     // 7. Update 3D Visual Models & Overhead HP Bars
     this.fighters.forEach((fighter) => {
       const model = this.fighterModels.get(fighter.id);
       const hpBar = this.fighterHpBars.get(fighter.id);
+
+      // Defeated robots MUST disappear from the stage completely
+      if (fighter.isDead) {
+        if (model) {
+          model.root.visible = false;
+          if (model.root.parent) {
+            model.root.parent.remove(model.root);
+          }
+        }
+        if (hpBar) {
+          hpBar.visible = false;
+          if (hpBar.parent) {
+            hpBar.parent.remove(hpBar);
+          }
+        }
+        return;
+      }
 
       if (model) {
         model.root.position.set(fighter.x, fighter.y, fighter.z);
@@ -1129,11 +1210,6 @@ export class ThreeArenaEngine {
           : !fighter.isDead;
 
         model.updateAnimation(time, isMoving, fighter.isAttacking, fighter.isHit);
-
-        if (fighter.isDead) {
-          model.root.rotation.x = Math.PI / 2;
-          model.root.position.y = -0.5;
-        }
       }
 
       if (hpBar) {
@@ -1213,6 +1289,7 @@ export class ThreeArenaEngine {
           type: p.type,
         })),
         playerRotation: this.playerFighter.rotation,
+        playerWeaponType: getCreatureWeaponType(this.playerFighter.creature),
         recentCombatLog: this.combatLogs.slice(-3),
         currentEnvironment: this.currentEnvironment,
         kineticCharge: Math.round(this.kineticCharge),
@@ -1271,7 +1348,12 @@ export class ThreeArenaEngine {
     if (closestTarget) {
       const target = closestTarget as ActiveFighter;
       const angleToTarget = Math.atan2(target.x - fighter.x, target.z - fighter.z);
-      fighter.rotation = angleToTarget;
+
+      // Smooth angular turning rather than instant snapping to prevent rotation jitter
+      let angleDiff = angleToTarget - fighter.rotation;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      fighter.rotation += angleDiff * Math.min(1, 14 * dt);
 
       const isBerserk = !!(fighter.berserkDuration && fighter.berserkDuration > 0);
       const dna = fighter.combatDna || fighter.creature.combatDna;
@@ -1382,16 +1464,12 @@ export class ThreeArenaEngine {
     }
   }
 
-  // Attack Execution: Primary Projectile or Claw Strike
+  // Attack Execution: Archetype-Specific Weapon Attacks (Swords, Flamethrower, Double Guns, Mage, Fighter, Archer, Magic Fist, Electric Stun Gun, Launcher, Disk Thrower, Laser Gun)
   public executeAttack(fighter: ActiveFighter) {
     fighter.isAttacking = true;
     setTimeout(() => {
       fighter.isAttacking = false;
     }, 180);
-
-    const speed = 28;
-    const vx = Math.sin(fighter.rotation) * speed;
-    const vz = Math.cos(fighter.rotation) * speed;
 
     const baseMult = fighter.isPlayer ? 0.90 : 0.40;
     let bulletDamage = Math.round(fighter.creature.stats.attack * baseMult);
@@ -1399,29 +1477,362 @@ export class ThreeArenaEngine {
       bulletDamage = Math.round(bulletDamage * this.forgeBonuses.damageMultiplier);
     }
 
-    const proj: AttackProjectile = {
-      id: `proj-${Date.now()}-${Math.random()}`,
-      ownerId: fighter.id,
-      x: fighter.x + Math.sin(fighter.rotation) * 1.5,
-      y: fighter.y + 1.8,
-      z: fighter.z + Math.cos(fighter.rotation) * 1.5,
-      vx,
-      vz,
-      damage: Math.max(12, bulletDamage),
-      color: fighter.creature.visualParams.glowColor,
-      radius: 0.45,
-      element: fighter.creature.element,
-      lifetime: 1.2,
-    };
+    const weaponType = getCreatureWeaponType(fighter.creature);
+    const color = fighter.creature.visualParams.glowColor;
+    const rot = fighter.rotation;
 
-    const geo = new THREE.SphereGeometry(proj.radius, 8, 8);
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(proj.color) });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(proj.x, proj.y, proj.z);
-    this.scene.add(mesh);
+    if (weaponType === 'swords') {
+      // Swordsman: Crescent Energon Arc Slash with forward strike impulse
+      const lunge = 0.3;
+      const targetX = fighter.x + Math.sin(rot) * lunge;
+      const targetZ = fighter.z + Math.cos(rot) * lunge;
+      const distFromCenter = Math.hypot(targetX, targetZ);
+      if (distFromCenter < this.arenaRadius - 2.8) {
+        fighter.x = targetX;
+        fighter.z = targetZ;
+      }
+      const speed = 34;
+      const radius = 1.35;
+      const proj: AttackProjectile = {
+        id: `proj-sword-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.6,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.6,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(16, Math.round(bulletDamage * 1.35)),
+        color,
+        radius,
+        element: fighter.creature.element,
+        lifetime: 0.6,
+        weaponType: 'swords',
+        isPiercing: true,
+        pierceCount: 3,
+      };
+      const mesh = createWeaponProjectileMesh('swords', color, radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else if (weaponType === 'flamethrower') {
+      // Flame Thrower: 3 expanding fiery plasma jets with burning damage
+      const spreadAngles = [-0.18, 0, 0.18];
+      spreadAngles.forEach((angleOffset, idx) => {
+        const spreadRot = rot + angleOffset;
+        const speed = 24 + idx * 2;
+        const radius = 0.65;
+        const proj: AttackProjectile = {
+          id: `proj-flame-${Date.now()}-${Math.random()}-${idx}`,
+          ownerId: fighter.id,
+          x: fighter.x + Math.sin(rot) * 1.4,
+          y: fighter.y + 1.7,
+          z: fighter.z + Math.cos(rot) * 1.4,
+          vx: Math.sin(spreadRot) * speed,
+          vz: Math.cos(spreadRot) * speed,
+          damage: Math.max(8, Math.round(bulletDamage * 0.45)),
+          color: '#f97316',
+          radius,
+          element: 'fire',
+          lifetime: 0.85,
+          weaponType: 'flamethrower',
+          burnDuration: 2.2,
+        };
+        const mesh = createWeaponProjectileMesh('flamethrower', '#f97316', radius, spreadRot);
+        mesh.position.set(proj.x, proj.y, proj.z);
+        this.scene.add(mesh);
+        this.projectiles.push(proj);
+        this.projectileMeshes.set(proj.id, mesh);
+      });
+    } else if (weaponType === 'double_guns') {
+      // Double Guns: Rapid dual laser blaster bolts
+      const speed = 46;
+      const radius = 0.35;
+      const rightX = fighter.x + Math.sin(rot) * 1.5 + Math.cos(rot) * 0.55;
+      const rightZ = fighter.z + Math.cos(rot) * 1.5 - Math.sin(rot) * 0.55;
+      const projRight: AttackProjectile = {
+        id: `proj-gun1-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: rightX,
+        y: fighter.y + 1.8,
+        z: rightZ,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(10, Math.round(bulletDamage * 0.65)),
+        color,
+        radius,
+        element: fighter.creature.element,
+        lifetime: 1.1,
+        weaponType: 'double_guns',
+      };
+      const meshR = createWeaponProjectileMesh('double_guns', color, radius, rot);
+      meshR.position.set(projRight.x, projRight.y, projRight.z);
+      this.scene.add(meshR);
+      this.projectiles.push(projRight);
+      this.projectileMeshes.set(projRight.id, meshR);
 
-    this.projectiles.push(proj);
-    this.projectileMeshes.set(proj.id, mesh);
+      // Left gun second shot delayed slightly
+      setTimeout(() => {
+        if (fighter.isDead) return;
+        const leftX = fighter.x + Math.sin(fighter.rotation) * 1.5 - Math.cos(fighter.rotation) * 0.55;
+        const leftZ = fighter.z + Math.cos(fighter.rotation) * 1.5 + Math.sin(fighter.rotation) * 0.55;
+        const projLeft: AttackProjectile = {
+          id: `proj-gun2-${Date.now()}-${Math.random()}`,
+          ownerId: fighter.id,
+          x: leftX,
+          y: fighter.y + 1.8,
+          z: leftZ,
+          vx: Math.sin(fighter.rotation) * speed,
+          vz: Math.cos(fighter.rotation) * speed,
+          damage: Math.max(10, Math.round(bulletDamage * 0.65)),
+          color,
+          radius,
+          element: fighter.creature.element,
+          lifetime: 1.1,
+          weaponType: 'double_guns',
+        };
+        const meshL = createWeaponProjectileMesh('double_guns', color, radius, fighter.rotation);
+        meshL.position.set(projLeft.x, projLeft.y, projLeft.z);
+        this.scene.add(meshL);
+        this.projectiles.push(projLeft);
+        this.projectileMeshes.set(projLeft.id, meshL);
+      }, 75);
+    } else if (weaponType === 'mage_spell') {
+      // Mage: Astral homing spell orb
+      const speed = 26;
+      const radius = 0.75;
+      const nearestRival = this.fighters.find((f) => f.id !== fighter.id && !f.isDead);
+      const proj: AttackProjectile = {
+        id: `proj-mage-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.5,
+        y: fighter.y + 1.9,
+        z: fighter.z + Math.cos(rot) * 1.5,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(15, Math.round(bulletDamage * 1.15)),
+        color: '#a855f7',
+        radius,
+        element: 'electric',
+        lifetime: 1.6,
+        weaponType: 'mage_spell',
+        isHoming: true,
+        homingTargetId: nearestRival?.id,
+      };
+      const mesh = createWeaponProjectileMesh('mage_spell', '#a855f7', radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else if (weaponType === 'fighter') {
+      // Fighter: Kinetic hydraulic power punch shockwave with forward rush
+      fighter.x += Math.sin(rot) * 1.1;
+      fighter.z += Math.cos(rot) * 1.1;
+      const speed = 36;
+      const radius = 0.85;
+      const proj: AttackProjectile = {
+        id: `proj-punch-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.6,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.6,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(16, Math.round(bulletDamage * 1.25)),
+        color: '#eab308',
+        radius,
+        element: 'rock',
+        lifetime: 0.55,
+        weaponType: 'fighter',
+        knockbackForce: 4.5,
+      };
+      const mesh = createWeaponProjectileMesh('fighter', '#eab308', radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else if (weaponType === 'archer_bow') {
+      // Archer: High-speed photon piercing arrow
+      const speed = 64;
+      const radius = 0.4;
+      const proj: AttackProjectile = {
+        id: `proj-arrow-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.6,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.6,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(14, Math.round(bulletDamage * 1.2)),
+        color: '#22c55e',
+        radius,
+        element: fighter.creature.element,
+        lifetime: 1.3,
+        weaponType: 'archer_bow',
+        isPiercing: true,
+        pierceCount: 2,
+      };
+      const mesh = createWeaponProjectileMesh('archer_bow', '#22c55e', radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else if (weaponType === 'magic_fist') {
+      // Magic Fist: Heavy spectral rocket fist projectile
+      const speed = 32;
+      const radius = 0.95;
+      const proj: AttackProjectile = {
+        id: `proj-fist-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.6,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.6,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(16, Math.round(bulletDamage * 1.3)),
+        color: '#f59e0b',
+        radius,
+        element: fighter.creature.element,
+        lifetime: 1.0,
+        weaponType: 'magic_fist',
+        knockbackForce: 5.5,
+      };
+      const mesh = createWeaponProjectileMesh('magic_fist', '#f59e0b', radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else if (weaponType === 'electric_stun_gun') {
+      // Electric Stun Gun: High-voltage crackling spark bolt with stun
+      const speed = 42;
+      const radius = 0.55;
+      const proj: AttackProjectile = {
+        id: `proj-stun-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.5,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.5,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(12, Math.round(bulletDamage * 0.95)),
+        color: '#facc15',
+        radius,
+        element: 'electric',
+        lifetime: 1.1,
+        weaponType: 'electric_stun_gun',
+        stunDuration: 1.0,
+      };
+      const mesh = createWeaponProjectileMesh('electric_stun_gun', '#facc15', radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else if (weaponType === 'launcher') {
+      // Launcher: Explosive rocket missile with AoE explosion radius
+      const speed = 30;
+      const radius = 0.7;
+      const proj: AttackProjectile = {
+        id: `proj-rocket-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.6,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.6,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(18, Math.round(bulletDamage * 1.25)),
+        color: '#ef4444',
+        radius,
+        element: 'fire',
+        lifetime: 1.3,
+        weaponType: 'launcher',
+        aoeRadius: 4.2,
+      };
+      const mesh = createWeaponProjectileMesh('launcher', '#ef4444', radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else if (weaponType === 'disk_thrower') {
+      // Disk Thrower: Spinning razor plasma chakram with ricochet bounce
+      const speed = 36;
+      const radius = 0.75;
+      const proj: AttackProjectile = {
+        id: `proj-disk-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.5,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.5,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(12, Math.round(bulletDamage * 0.85)),
+        color: '#06b6d4',
+        radius,
+        element: 'ice',
+        lifetime: 1.8,
+        weaponType: 'disk_thrower',
+        ricochetCount: 3,
+        spinSpeed: 25,
+      };
+      const mesh = createWeaponProjectileMesh('disk_thrower', '#06b6d4', radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else if (weaponType === 'laser_gun') {
+      // Laser Gun: Long continuous piercing rail-beam rod
+      const speed = 80;
+      const radius = 0.45;
+      const proj: AttackProjectile = {
+        id: `proj-laser-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.6,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.6,
+        vx: Math.sin(rot) * speed,
+        vz: Math.cos(rot) * speed,
+        damage: Math.max(14, Math.round(bulletDamage * 1.1)),
+        color: '#6366f1',
+        radius,
+        element: fighter.creature.element,
+        lifetime: 0.9,
+        weaponType: 'laser_gun',
+        isPiercing: true,
+        pierceCount: 4,
+      };
+      const mesh = createWeaponProjectileMesh('laser_gun', '#6366f1', radius, rot);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    } else {
+      // Fallback: Standard plasma blaster bullet
+      const speed = 28;
+      const vx = Math.sin(rot) * speed;
+      const vz = Math.cos(rot) * speed;
+      const proj: AttackProjectile = {
+        id: `proj-${Date.now()}-${Math.random()}`,
+        ownerId: fighter.id,
+        x: fighter.x + Math.sin(rot) * 1.5,
+        y: fighter.y + 1.8,
+        z: fighter.z + Math.cos(rot) * 1.5,
+        vx,
+        vz,
+        damage: Math.max(12, bulletDamage),
+        color,
+        radius: 0.45,
+        element: fighter.creature.element,
+        lifetime: 1.2,
+      };
+
+      const geo = new THREE.SphereGeometry(proj.radius, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(proj.color) });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(proj.x, proj.y, proj.z);
+      this.scene.add(mesh);
+
+      this.projectiles.push(proj);
+      this.projectileMeshes.set(proj.id, mesh);
+    }
 
     if (fighter.isPlayer) {
       sound.playClick();
@@ -1440,9 +1851,53 @@ export class ThreeArenaEngine {
 
     const ability = fighter.creature.specialAbility;
     const specialMultiplier = fighter.isPlayer ? this.forgeBonuses.specialMultiplier : 1.0;
-    const baseDamage = Math.round(ability.damage * specialMultiplier);
-    const effectType = ability.effectType || 'damage_burst';
-    const abilityColor = fighter.creature.visualParams.glowColor;
+    const baseDamage = Math.round((ability.damage || 180) * specialMultiplier);
+    const abilityColor = fighter.creature.visualParams.glowColor || '#2BE29E';
+
+    // Intelligently resolve unique special ability effect for every robot:
+    let resolvedEffect = ability.effectType || '';
+    if (!resolvedEffect || resolvedEffect === 'generic') {
+      const nameLower = (ability.name || '').toLowerCase();
+      const vfx = ability.vfxType || '';
+
+      if (nameLower.includes('supercharger') || nameLower.includes('cataclysmic') || nameLower.includes('nova') || nameLower.includes('v8')) {
+        resolvedEffect = 'supercharger_nova';
+      } else if (nameLower.includes('matrix') || nameLower.includes('bastion') || nameLower.includes('shield')) {
+        resolvedEffect = 'buff_shield';
+      } else if (nameLower.includes('stinger') || nameLower.includes('warp') || nameLower.includes('lightning') || nameLower.includes('flash') || nameLower.includes('arc')) {
+        resolvedEffect = 'stun_chain';
+      } else if (nameLower.includes('singularity') || nameLower.includes('vortex') || nameLower.includes('black hole') || nameLower.includes('dark sing')) {
+        resolvedEffect = 'gravity_pull';
+      } else if (nameLower.includes('airstrike') || nameLower.includes('barrage') || nameLower.includes('missile')) {
+        resolvedEffect = 'homing_barrage';
+      } else if (nameLower.includes('disrupt') || nameLower.includes('sonic') || nameLower.includes('soundwave') || nameLower.includes('subwoofer')) {
+        resolvedEffect = 'weapon_disrupt';
+      } else if (nameLower.includes('mortar') || nameLower.includes('artillery') || nameLower.includes('battery')) {
+        resolvedEffect = 'artillery_cluster';
+      } else if (nameLower.includes('railgun') || nameLower.includes('beam') || nameLower.includes('ray') || nameLower.includes('lance')) {
+        resolvedEffect = 'piercing_beam';
+      } else if (nameLower.includes('berserk') || nameLower.includes('frenzy') || nameLower.includes('rage')) {
+        resolvedEffect = 'berserk_frenzy';
+      } else if (nameLower.includes('shred') || nameLower.includes('particle') || nameLower.includes('cyclops')) {
+        resolvedEffect = 'armor_shred';
+      } else if (nameLower.includes('ram') || nameLower.includes('emp') || nameLower.includes('surge')) {
+        resolvedEffect = 'ram_emp';
+      } else if (nameLower.includes('cyclone') || nameLower.includes('turbine') || nameLower.includes('twister') || nameLower.includes('storm')) {
+        resolvedEffect = 'vortex_lift';
+      } else if (nameLower.includes('siege') || nameLower.includes('cannonade')) {
+        resolvedEffect = 'siege_crush';
+      } else if (nameLower.includes('stealth') || nameLower.includes('decoy') || nameLower.includes('cloak')) {
+        resolvedEffect = 'stealth_crit';
+      } else if (nameLower.includes('spike') || nameLower.includes('thorn') || nameLower.includes('canopy')) {
+        resolvedEffect = 'spikes';
+      } else if (vfx && (vfx as string) !== 'generic' && vfx !== 'nova') {
+        resolvedEffect = vfx;
+      } else if (fighter.creature.weaponType) {
+        resolvedEffect = fighter.creature.weaponType;
+      } else {
+        resolvedEffect = 'supercharger_nova';
+      }
+    }
 
     // Trigger ability casting sound and record observer
     if (fighter.isPlayer) {
@@ -1450,7 +1905,165 @@ export class ThreeArenaEngine {
       this.combatObserver.recordPlayerSpecialAbility();
     }
 
-    switch (effectType) {
+    switch (resolvedEffect) {
+      case 'damage_burst':
+      case 'supercharger_nova':
+      case 'nova': {
+        // Colossal V8 Muscle Car Engine: Cataclysmic Supercharger Nova!
+        const radius = 16;
+        // Adrenaline supercharge repairs caster +70 HP
+        fighter.currentHp = Math.min(fighter.maxHp, fighter.currentHp + 70);
+
+        this.fighters.forEach((target) => {
+          if (target.id === fighter.id || target.isDead) return;
+          const d = Math.hypot(target.x - fighter.x, target.z - fighter.z);
+          if (d <= radius) {
+            // High aerial leap dodges ground nova blast!
+            if (target.y > 1.6) {
+              if (target.isPlayer) {
+                this.damageFloaters.push({
+                  id: `floater-leap-dodge-${Date.now()}`,
+                  text: '💨 LEAPED OVER SUPERCHARGER NOVA!',
+                  x: target.x,
+                  y: target.y + 2.6,
+                  z: target.z,
+                  color: '#38BDF8',
+                  isCrit: true,
+                  opacity: 1.0,
+                });
+              }
+              return;
+            }
+
+            const falloff = Math.max(0.45, 1 - (d / radius) * 0.45);
+            const dmg = Math.round(baseDamage * falloff);
+            this.damageFighter(target, dmg, fighter.creature.name, true, 'fire');
+            target.burnDuration = 3.5;
+
+            // Colossal Radial Knockback
+            const angle = Math.atan2(target.x - fighter.x, target.z - fighter.z);
+            const impulse = Math.max(5.0, (16 - d) * 0.8);
+            target.x += Math.sin(angle) * impulse;
+            target.z += Math.cos(angle) * impulse;
+          }
+        });
+
+        // Triple expanding supercharger flame rings & particle explosion
+        const fireColors = [0xff4500, 0xffa500, 0xef4444];
+        fireColors.forEach((col, i) => {
+          const ringGeo = new THREE.RingGeometry(0.8, 2.0 + i * 0.8, 32);
+          ringGeo.rotateX(-Math.PI / 2);
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: col,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.9,
+          });
+          const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+          ringMesh.position.set(fighter.x, 0.2 + i * 0.2, fighter.z);
+          this.scene.add(ringMesh);
+
+          let scale = 1.0;
+          const anim = setInterval(() => {
+            scale += 1.4;
+            ringMesh.scale.set(scale, scale, scale);
+            ringMat.opacity -= 0.08;
+            if (ringMat.opacity <= 0 || scale > 14) {
+              clearInterval(anim);
+              this.scene.remove(ringMesh);
+              ringGeo.dispose();
+              ringMat.dispose();
+            }
+          }, 20);
+        });
+
+        this.damageFloaters.push({
+          id: `floater-supercharger-${Date.now()}`,
+          text: `💥 ${ability.name ? ability.name.toUpperCase() : 'SUPERCHARGER NOVA!'}`,
+          x: fighter.x,
+          y: 4.8,
+          z: fighter.z,
+          color: '#F97316',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'spikes':
+      case 'thornstorm': {
+        // Nature / Botanical Mechs: Petrified Thornstorm Canopy Eruption
+        const spikeRadius = 14;
+        this.fighters.forEach((target) => {
+          if (target.id === fighter.id || target.isDead) return;
+          const d = Math.hypot(target.x - fighter.x, target.z - fighter.z);
+          if (d <= spikeRadius) {
+            if (target.y > 1.5) {
+              if (target.isPlayer) {
+                this.damageFloaters.push({
+                  id: `floater-leap-thorn-${Date.now()}`,
+                  text: '💨 LEAPED OVER THORNSTORM!',
+                  x: target.x,
+                  y: target.y + 2.6,
+                  z: target.z,
+                  color: '#38BDF8',
+                  isCrit: true,
+                  opacity: 1.0,
+                });
+              }
+              return;
+            }
+            const dmg = Math.round(baseDamage * 0.95);
+            this.damageFighter(target, dmg, fighter.creature.name, true, 'nature');
+            target.isStunned = true;
+            target.stunDuration = 2.0;
+          }
+        });
+
+        // 12 Petrified Jade/Emerald Thorns erupting upwards
+        const spikeCount = 12;
+        const spikeGroup = new THREE.Group();
+        for (let s = 0; s < spikeCount; s++) {
+          const sAngle = (s * Math.PI * 2) / spikeCount;
+          const sDist = 4.0 + (s % 3) * 3.0;
+          const coneGeo = new THREE.ConeGeometry(0.7, 4.5, 6);
+          const coneMat = new THREE.MeshStandardMaterial({
+            color: 0x22c55e,
+            emissive: 0x15803d,
+            roughness: 0.3,
+          });
+          const cone = new THREE.Mesh(coneGeo, coneMat);
+          cone.position.set(Math.sin(sAngle) * sDist, 2.2, Math.cos(sAngle) * sDist);
+          spikeGroup.add(cone);
+        }
+        spikeGroup.position.set(fighter.x, 0, fighter.z);
+        this.scene.add(spikeGroup);
+
+        setTimeout(() => {
+          let sY = 0;
+          const sinkAnim = setInterval(() => {
+            sY -= 0.3;
+            spikeGroup.position.y = sY;
+            if (sY < -4.5) {
+              clearInterval(sinkAnim);
+              this.scene.remove(spikeGroup);
+            }
+          }, 25);
+        }, 900);
+
+        this.damageFloaters.push({
+          id: `floater-spikes-${Date.now()}`,
+          text: `🌿 ${ability.name ? ability.name.toUpperCase() : 'THORNSTORM ERUPTION!'}`,
+          x: fighter.x,
+          y: 4.6,
+          z: fighter.z,
+          color: '#22C55E',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
       case 'buff_shield': {
         // Optimus Prime: Matrix Bastion Shield
         const healAmt = Math.round(75 * specialMultiplier);
@@ -2045,6 +2658,443 @@ export class ThreeArenaEngine {
         break;
       }
 
+      // Archetype-Specific Special Abilities
+      case 'swords':
+      case 'whirlwind_tempest': {
+        // Swordsman: Whirlwind Blade Tempest
+        const waveCount = 6;
+        for (let w = 0; w < waveCount; w++) {
+          const waveAngle = fighter.rotation + (w * Math.PI * 2) / waveCount;
+          const speed = 32;
+          const radius = 1.6;
+          const proj: AttackProjectile = {
+            id: `proj-whirl-${Date.now()}-${w}`,
+            ownerId: fighter.id,
+            x: fighter.x + Math.sin(waveAngle) * 1.5,
+            y: fighter.y + 1.8,
+            z: fighter.z + Math.cos(waveAngle) * 1.5,
+            vx: Math.sin(waveAngle) * speed,
+            vz: Math.cos(waveAngle) * speed,
+            damage: Math.round(baseDamage * 0.75),
+            color: abilityColor,
+            radius,
+            element: fighter.creature.element,
+            lifetime: 0.75,
+            weaponType: 'swords',
+            isPiercing: true,
+            pierceCount: 4,
+          };
+          const mesh = createWeaponProjectileMesh('swords', abilityColor, radius, waveAngle);
+          mesh.position.set(proj.x, proj.y, proj.z);
+          this.scene.add(mesh);
+          this.projectiles.push(proj);
+          this.projectileMeshes.set(proj.id, mesh);
+        }
+        this.damageFloaters.push({
+          id: `floater-tempest-${Date.now()}`,
+          text: '⚔️ WHIRLWIND BLADE TEMPEST!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#38BDF8',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'flamethrower':
+      case 'magma_flamethrower': {
+        // Flame Thrower: Inferno Magma Torrent
+        const burstCount = 10;
+        for (let b = 0; b < burstCount; b++) {
+          const spread = (Math.random() - 0.5) * 0.75;
+          const flameRot = fighter.rotation + spread;
+          const speed = 20 + Math.random() * 12;
+          const radius = 0.8;
+          const proj: AttackProjectile = {
+            id: `proj-inferno-${Date.now()}-${b}`,
+            ownerId: fighter.id,
+            x: fighter.x + Math.sin(fighter.rotation) * 1.4,
+            y: fighter.y + 1.6,
+            z: fighter.z + Math.cos(fighter.rotation) * 1.4,
+            vx: Math.sin(flameRot) * speed,
+            vz: Math.cos(flameRot) * speed,
+            damage: Math.round(baseDamage * 0.35),
+            color: '#f97316',
+            radius,
+            element: 'fire',
+            lifetime: 1.1,
+            weaponType: 'flamethrower',
+            burnDuration: 3.0,
+          };
+          const mesh = createWeaponProjectileMesh('flamethrower', '#f97316', radius, flameRot);
+          mesh.position.set(proj.x, proj.y, proj.z);
+          this.scene.add(mesh);
+          this.projectiles.push(proj);
+          this.projectileMeshes.set(proj.id, mesh);
+        }
+        this.damageFloaters.push({
+          id: `floater-inferno-${Date.now()}`,
+          text: '🔥 INFERNO MAGMA TORRENT!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#F97316',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'double_guns':
+      case 'bulletstorm': {
+        // Double Guns: Bulletstorm Barrage (Rapid 8-bolt dual barrage)
+        for (let b = 0; b < 8; b++) {
+          setTimeout(() => {
+            if (fighter.isDead) return;
+            const isLeft = b % 2 === 0;
+            const sideOffset = isLeft ? -0.6 : 0.6;
+            const curRot = fighter.rotation + (Math.random() - 0.5) * 0.1;
+            const speed = 48;
+            const radius = 0.4;
+            const px = fighter.x + Math.sin(curRot) * 1.6 + Math.cos(curRot) * sideOffset;
+            const pz = fighter.z + Math.cos(curRot) * 1.6 - Math.sin(curRot) * sideOffset;
+            const proj: AttackProjectile = {
+              id: `proj-barrage-${Date.now()}-${b}`,
+              ownerId: fighter.id,
+              x: px,
+              y: fighter.y + 1.8,
+              z: pz,
+              vx: Math.sin(curRot) * speed,
+              vz: Math.cos(curRot) * speed,
+              damage: Math.round(baseDamage * 0.45),
+              color: abilityColor,
+              radius,
+              element: fighter.creature.element,
+              lifetime: 1.2,
+              weaponType: 'double_guns',
+            };
+            const mesh = createWeaponProjectileMesh('double_guns', abilityColor, radius, curRot);
+            mesh.position.set(proj.x, proj.y, proj.z);
+            this.scene.add(mesh);
+            this.projectiles.push(proj);
+            this.projectileMeshes.set(proj.id, mesh);
+          }, b * 65);
+        }
+        this.damageFloaters.push({
+          id: `floater-guns-${Date.now()}`,
+          text: '🔫 BULLETSTORM BARRAGE!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#38BDF8',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'mage_spell':
+      case 'astral_singularity': {
+        // Mage: Cosmic Singularity Collapse
+        const proj: AttackProjectile = {
+          id: `proj-singularity-${Date.now()}`,
+          ownerId: fighter.id,
+          x: fighter.x + Math.sin(fighter.rotation) * 8.0,
+          y: 1.8,
+          z: fighter.z + Math.cos(fighter.rotation) * 8.0,
+          vx: 0,
+          vz: 0,
+          damage: baseDamage,
+          color: '#a855f7',
+          radius: 2.2,
+          element: 'electric',
+          lifetime: 3.5,
+          weaponType: 'mage_spell',
+          isSingularity: true,
+        };
+        const mesh = createWeaponProjectileMesh('mage_spell', '#a855f7', 2.2, fighter.rotation);
+        mesh.position.set(proj.x, proj.y, proj.z);
+        this.scene.add(mesh);
+        this.projectiles.push(proj);
+        this.projectileMeshes.set(proj.id, mesh);
+
+        this.damageFloaters.push({
+          id: `floater-vortex-${Date.now()}`,
+          text: '🔮 COSMIC SINGULARITY COLLAPSE!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#A855F7',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'fighter':
+      case 'titan_breaker': {
+        // Fighter: Titan Breaker Seismic Pummel (Radial shockwave + 2.5s stun)
+        const radius = 11;
+        this.fighters.forEach((target) => {
+          if (target.id === fighter.id || target.isDead) return;
+          const d = Math.hypot(target.x - fighter.x, target.z - fighter.z);
+          if (d <= radius) {
+            this.damageFighter(target, baseDamage, fighter.creature.name, true, 'rock');
+            target.stunDuration = 2.5;
+            this.applyKnockback(target, fighter.x, fighter.z, 6.0);
+          }
+        });
+        this.damageFloaters.push({
+          id: `floater-titan-${Date.now()}`,
+          text: '👊 TITAN BREAKER EARTHQUAKE!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#EAB308',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'archer_bow':
+      case 'arrow_volley': {
+        // Archer: Supersonic Arrow Volley (7 piercing photon arrows)
+        for (let a = -3; a <= 3; a++) {
+          const arrowRot = fighter.rotation + a * 0.12;
+          const speed = 65;
+          const radius = 0.45;
+          const proj: AttackProjectile = {
+            id: `proj-volley-${Date.now()}-${a}`,
+            ownerId: fighter.id,
+            x: fighter.x + Math.sin(arrowRot) * 1.6,
+            y: fighter.y + 1.8,
+            z: fighter.z + Math.cos(arrowRot) * 1.6,
+            vx: Math.sin(arrowRot) * speed,
+            vz: Math.cos(arrowRot) * speed,
+            damage: Math.round(baseDamage * 0.65),
+            color: '#22c55e',
+            radius,
+            element: fighter.creature.element,
+            lifetime: 1.5,
+            weaponType: 'archer_bow',
+            isPiercing: true,
+            pierceCount: 3,
+          };
+          const mesh = createWeaponProjectileMesh('archer_bow', '#22c55e', radius, arrowRot);
+          mesh.position.set(proj.x, proj.y, proj.z);
+          this.scene.add(mesh);
+          this.projectiles.push(proj);
+          this.projectileMeshes.set(proj.id, mesh);
+        }
+        this.damageFloaters.push({
+          id: `floater-volley-${Date.now()}`,
+          text: '🏹 SUPERSONIC ARROW VOLLEY!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#22C55E',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'magic_fist':
+      case 'gigaton_megafist': {
+        // Magic Fist: Gigaton Megafist Slam (Massive rocket fist with colossal AoE)
+        const speed = 30;
+        const radius = 1.4;
+        const proj: AttackProjectile = {
+          id: `proj-megafist-${Date.now()}`,
+          ownerId: fighter.id,
+          x: fighter.x + Math.sin(fighter.rotation) * 2.0,
+          y: fighter.y + 1.9,
+          z: fighter.z + Math.cos(fighter.rotation) * 2.0,
+          vx: Math.sin(fighter.rotation) * speed,
+          vz: Math.cos(fighter.rotation) * speed,
+          damage: baseDamage,
+          color: '#f59e0b',
+          radius,
+          element: fighter.creature.element,
+          lifetime: 1.5,
+          weaponType: 'magic_fist',
+          knockbackForce: 7.0,
+          aoeRadius: 6.5,
+        };
+        const mesh = createWeaponProjectileMesh('magic_fist', '#f59e0b', radius, fighter.rotation);
+        mesh.position.set(proj.x, proj.y, proj.z);
+        this.scene.add(mesh);
+        this.projectiles.push(proj);
+        this.projectileMeshes.set(proj.id, mesh);
+
+        this.damageFloaters.push({
+          id: `floater-fist-${Date.now()}`,
+          text: '🥊 GIGATON MEGAFIST SLAM!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#F59E0B',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'electric_stun_gun':
+      case 'emp_overload': {
+        // Electric Stun Gun: Chain Lightning EMP Overload (360 stun shockwave)
+        const radius = 12;
+        this.fighters.forEach((target) => {
+          if (target.id === fighter.id || target.isDead) return;
+          const d = Math.hypot(target.x - fighter.x, target.z - fighter.z);
+          if (d <= radius) {
+            this.damageFighter(target, baseDamage, fighter.creature.name, true, 'electric');
+            target.stunDuration = 2.5;
+            this.applyKnockback(target, fighter.x, fighter.z, 4.5);
+          }
+        });
+        this.damageFloaters.push({
+          id: `floater-emp-${Date.now()}`,
+          text: '⚡ CHAIN LIGHTNING EMP OVERLOAD!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#FACC15',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'launcher':
+      case 'cluster_barrage': {
+        // Launcher: Cluster Warhead Barrage (4 explosive cluster rockets)
+        for (let r = 0; r < 4; r++) {
+          const rocketRot = fighter.rotation + (r - 1.5) * 0.25;
+          const speed = 28;
+          const radius = 0.8;
+          const proj: AttackProjectile = {
+            id: `proj-cluster-${Date.now()}-${r}`,
+            ownerId: fighter.id,
+            x: fighter.x + Math.sin(rocketRot) * 1.8,
+            y: fighter.y + 2.0,
+            z: fighter.z + Math.cos(rocketRot) * 1.8,
+            vx: Math.sin(rocketRot) * speed,
+            vz: Math.cos(rocketRot) * speed,
+            damage: Math.round(baseDamage * 0.75),
+            color: '#ef4444',
+            radius,
+            element: 'fire',
+            lifetime: 1.4,
+            weaponType: 'launcher',
+            aoeRadius: 4.5,
+          };
+          const mesh = createWeaponProjectileMesh('launcher', '#ef4444', radius, rocketRot);
+          mesh.position.set(proj.x, proj.y, proj.z);
+          this.scene.add(mesh);
+          this.projectiles.push(proj);
+          this.projectileMeshes.set(proj.id, mesh);
+        }
+        this.damageFloaters.push({
+          id: `floater-cluster-${Date.now()}`,
+          text: '🚀 CLUSTER WARHEAD BARRAGE!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#EF4444',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'disk_thrower':
+      case 'chakram_swarm': {
+        // Disk Thrower: Triple Hyper-Chakram Swarm (3 bouncing chakrams)
+        for (let d = -1; d <= 1; d++) {
+          const diskRot = fighter.rotation + d * 0.28;
+          const speed = 36;
+          const radius = 0.85;
+          const proj: AttackProjectile = {
+            id: `proj-chakram-${Date.now()}-${d}`,
+            ownerId: fighter.id,
+            x: fighter.x + Math.sin(diskRot) * 1.6,
+            y: fighter.y + 1.8,
+            z: fighter.z + Math.cos(diskRot) * 1.6,
+            vx: Math.sin(diskRot) * speed,
+            vz: Math.cos(diskRot) * speed,
+            damage: Math.round(baseDamage * 0.65),
+            color: '#06b6d4',
+            radius,
+            element: 'ice',
+            lifetime: 2.2,
+            weaponType: 'disk_thrower',
+            ricochetCount: 4,
+            spinSpeed: 30,
+          };
+          const mesh = createWeaponProjectileMesh('disk_thrower', '#06b6d4', radius, diskRot);
+          mesh.position.set(proj.x, proj.y, proj.z);
+          this.scene.add(mesh);
+          this.projectiles.push(proj);
+          this.projectileMeshes.set(proj.id, mesh);
+        }
+        this.damageFloaters.push({
+          id: `floater-chakram-${Date.now()}`,
+          text: '💿 TRIPLE HYPER-CHAKRAM SWARM!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#06B6D4',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
+      case 'laser_gun':
+      case 'death_ray': {
+        // Laser Gun: Orbital Death Ray (Continuous piercing rail-beam)
+        const speed = 90;
+        const radius = 0.6;
+        const proj: AttackProjectile = {
+          id: `proj-deathray-${Date.now()}`,
+          ownerId: fighter.id,
+          x: fighter.x + Math.sin(fighter.rotation) * 2.0,
+          y: fighter.y + 1.8,
+          z: fighter.z + Math.cos(fighter.rotation) * 2.0,
+          vx: Math.sin(fighter.rotation) * speed,
+          vz: Math.cos(fighter.rotation) * speed,
+          damage: baseDamage,
+          color: '#6366f1',
+          radius,
+          element: fighter.creature.element,
+          lifetime: 1.1,
+          weaponType: 'laser_gun',
+          isPiercing: true,
+          pierceCount: 10,
+        };
+        const mesh = createWeaponProjectileMesh('laser_gun', '#6366f1', radius, fighter.rotation);
+        mesh.position.set(proj.x, proj.y, proj.z);
+        this.scene.add(mesh);
+        this.projectiles.push(proj);
+        this.projectileMeshes.set(proj.id, mesh);
+
+        this.damageFloaters.push({
+          id: `floater-laser-${Date.now()}`,
+          text: '⚡ ORBITAL DEATH RAY!',
+          x: fighter.x,
+          y: 4.5,
+          z: fighter.z,
+          color: '#6366F1',
+          isCrit: true,
+          opacity: 1.0,
+        });
+        break;
+      }
+
       default: {
         // Fallback: 360 AoE Nova blast
         const radius = 10;
@@ -2080,7 +3130,7 @@ export class ThreeArenaEngine {
     }
 
     this.combatLogs.push(`⚡ ${fighter.creature.name} activated [${ability.name}]!`);
-    if (fighter.isPlayer) sound.playPlayerEliminated();
+    if (fighter.isPlayer) sound.playBonus();
   }
 
   // Dash Evade with Kinetic Surge Overload
@@ -2170,17 +3220,43 @@ export class ThreeArenaEngine {
     }
   }
 
-  // Jump execution with arcade vertical velocity
+  // Jump execution with arcade vertical velocity (High heroic leap to dodge attacks)
   public executeJump(fighter: ActiveFighter) {
     if (fighter.y > 0.1 || fighter.isDead) return;
     fighter.isJumping = true;
-    fighter.jumpVelocityY = 13.5;
+    fighter.jumpVelocityY = 24.0; // High athletic leap soaring over rockets, beams, and shockwaves
     if (fighter.isPlayer) {
       this.combatObserver.recordPlayerJump();
     }
     try {
       sound.playJump();
     } catch {}
+
+    // Ground leap pulse ring
+    const jumpRingGeo = new THREE.RingGeometry(0.6, 2.2, 32);
+    jumpRingGeo.rotateX(-Math.PI / 2);
+    const ringColor = fighter.creature.visualParams.glowColor ? new THREE.Color(fighter.creature.visualParams.glowColor) : new THREE.Color(0x38bdf8);
+    const jumpRingMat = new THREE.MeshBasicMaterial({
+      color: ringColor,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const jumpRingMesh = new THREE.Mesh(jumpRingGeo, jumpRingMat);
+    jumpRingMesh.position.set(fighter.x, 0.05, fighter.z);
+    this.scene.add(jumpRingMesh);
+    let scale = 1.0;
+    const ringAnim = setInterval(() => {
+      scale += 0.35;
+      jumpRingMesh.scale.set(scale, scale, scale);
+      jumpRingMat.opacity -= 0.12;
+      if (jumpRingMat.opacity <= 0) {
+        clearInterval(ringAnim);
+        this.scene.remove(jumpRingMesh);
+        jumpRingGeo.dispose();
+        jumpRingMat.dispose();
+      }
+    }, 25);
   }
 
   // Damage Fighter & Check Kills with Real-World Material Physics & Environmental Synergy
@@ -2344,6 +3420,7 @@ export class ThreeArenaEngine {
       fighter.currentHp = Math.max(0, fighter.currentHp - mitigated);
     }
     fighter.isHit = true;
+    fighter.hitTimer = 0.16; // Solid, transient 160ms hit flinch that clears automatically
 
     // Floater
     this.damageFloaters.push({
@@ -2366,6 +3443,31 @@ export class ThreeArenaEngine {
     victim.isDead = true;
     victim.currentHp = 0;
 
+    // Immediately remove model from 3D stage
+    const model = this.fighterModels.get(victim.id);
+    if (model) {
+      model.root.visible = false;
+      if (model.root.parent) {
+        model.root.parent.remove(model.root);
+      }
+      this.scene.remove(model.root);
+      try {
+        model.dispose?.();
+      } catch {
+        // Ignore disposal errors
+      }
+    }
+
+    // Immediately remove overhead HP bar from 3D stage
+    const hpBar = this.fighterHpBars.get(victim.id);
+    if (hpBar) {
+      hpBar.visible = false;
+      if (hpBar.parent) {
+        hpBar.parent.remove(hpBar);
+      }
+      this.scene.remove(hpBar);
+    }
+
     // Award kill to killer
     const killer = this.fighters.find((f) => f.creature.name === killerName);
     if (killer) {
@@ -2374,13 +3476,93 @@ export class ThreeArenaEngine {
       killer.currentHp = Math.min(killer.maxHp, killer.currentHp + 100); // Heal on kill
     }
 
-    this.combatLogs.push(`⚔️ ${victim.creature.name} was eliminated by ${killerName}!`);
+    // Spectacular Disintegration & Vaporization VFX
+    this.createDefeatDisintegrationVfx(
+      victim.x,
+      victim.y,
+      victim.z,
+      victim.creature.visualParams?.glowColor || '#00E5FF'
+    );
+
+    this.damageFloaters.push({
+      id: `floater-elim-${Date.now()}-${Math.random()}`,
+      text: '💥 VAPORIZED & ELIMINATED',
+      x: victim.x,
+      y: victim.y + 3.2,
+      z: victim.z,
+      color: '#EF4444',
+      isCrit: true,
+      opacity: 1.0,
+    });
+
+    this.combatLogs.push(`⚔️ ${victim.creature.name} was vaporized and eliminated by ${killerName}!`);
 
     if (victim.isPlayer) {
       sound.playGameOver();
     } else {
       sound.playKill();
     }
+  }
+
+  // Defeat Disintegration VFX (Expanding Energy Shockwave Ring & Exploding Shards)
+  private createDefeatDisintegrationVfx(x: number, y: number, z: number, colorHex: string) {
+    const ringGeo = new THREE.RingGeometry(0.3, 1.2, 24);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(colorHex),
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 1.0,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.position.set(x, 0.25, z);
+    this.scene.add(ringMesh);
+
+    // Exploding cybernetic spark fragments
+    const sparkCount = 16;
+    const sparkGroup = new THREE.Group();
+    sparkGroup.position.set(x, y + 1.2, z);
+    const sparkGeo = new THREE.OctahedronGeometry(0.22, 0);
+    const sparkMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex) });
+    const fragments: { vx: number; vy: number; vz: number; mesh: THREE.Mesh }[] = [];
+
+    for (let i = 0; i < sparkCount; i++) {
+      const sp = new THREE.Mesh(sparkGeo, sparkMat);
+      sparkGroup.add(sp);
+      const angle = (i * Math.PI * 2) / sparkCount + (Math.random() - 0.5) * 0.4;
+      const horizSpeed = 7 + Math.random() * 8;
+      fragments.push({
+        vx: Math.cos(angle) * horizSpeed,
+        vy: 4 + Math.random() * 6,
+        vz: Math.sin(angle) * horizSpeed,
+        mesh: sp,
+      });
+    }
+    this.scene.add(sparkGroup);
+
+    let progress = 0;
+    const animInterval = setInterval(() => {
+      progress += 0.055;
+      ringMesh.scale.multiplyScalar(1.14);
+      ringMat.opacity = Math.max(0, 1 - progress);
+
+      fragments.forEach((f) => {
+        f.mesh.position.x += f.vx * 0.035;
+        f.mesh.position.y += f.vy * 0.035;
+        f.mesh.position.z += f.vz * 0.035;
+        f.vy -= 9.8 * 0.035;
+      });
+
+      if (progress >= 1.0) {
+        clearInterval(animInterval);
+        this.scene.remove(ringMesh);
+        ringGeo.dispose();
+        ringMat.dispose();
+        this.scene.remove(sparkGroup);
+        sparkGeo.dispose();
+        sparkMat.dispose();
+      }
+    }, 32);
   }
 
   // Update Projectiles Movement & Hitboxes with Elemental Passing & Ability Physics
@@ -2439,11 +3621,29 @@ export class ThreeArenaEngine {
       p.z += p.vz * dt;
       p.lifetime -= dt;
 
+      // Arena boundary ricochet for chakrams and ricochet projectiles
+      if (p.ricochetCount && p.ricochetCount > 0) {
+        const boundLimit = this.arenaRadius - 2.5;
+        if (Math.abs(p.x) > boundLimit) {
+          p.vx = -p.vx;
+          p.x = Math.sign(p.x) * boundLimit;
+          p.ricochetCount--;
+        }
+        if (Math.abs(p.z) > boundLimit) {
+          p.vz = -p.vz;
+          p.z = Math.sign(p.z) * boundLimit;
+          p.ricochetCount--;
+        }
+      }
+
       const mesh = this.projectileMeshes.get(p.id);
       if (mesh) {
         mesh.position.set(p.x, p.y, p.z);
         if (p.isCyclone) {
           mesh.rotation.y += 12 * dt;
+        }
+        if (p.weaponType === 'disk_thrower') {
+          mesh.rotation.y += (p.spinSpeed || 25) * dt;
         }
       }
 
@@ -2454,19 +3654,26 @@ export class ThreeArenaEngine {
         const d = Math.hypot(fighter.x - p.x, fighter.z - p.z);
         const dy = Math.abs((fighter.y + 1.8) - p.y);
 
-        // Aerial leap evasion: if fighter jumped high over a low projectile, it misses!
-        if (fighter.y > 1.2 && p.y <= 2.0) {
-          if (fighter.isPlayer && d < 2.0 && !fighter.isDead) {
-            this.damageFloaters.push({
-              id: `dodge-${Date.now()}-${Math.random()}`,
-              text: 'AERIAL LEAP DODGE!',
-              x: fighter.x,
-              y: fighter.y + 2.8,
-              z: fighter.z,
-              color: '#38BDF8',
-              isCrit: true,
-              opacity: 1.0,
-            });
+        // Aerial leap evasion: if fighter jumped high over a ground/mid-level attack, it dodges!
+        if (fighter.y > 0.8 && p.y < fighter.y + 1.2) {
+          if (fighter.isPlayer && d < 3.2 && !fighter.isDead) {
+            if (!p.hasDodgedPlayer) {
+              p.hasDodgedPlayer = true;
+              this.combatObserver.recordPlayerJump();
+              try {
+                sound.playDash();
+              } catch {}
+              this.damageFloaters.push({
+                id: `dodge-${Date.now()}-${Math.random()}`,
+                text: '💨 AERIAL DODGE!',
+                x: fighter.x,
+                y: fighter.y + 2.6,
+                z: fighter.z,
+                color: '#38BDF8',
+                isCrit: true,
+                opacity: 1.0,
+              });
+            }
           }
           continue;
         }
@@ -2495,12 +3702,65 @@ export class ThreeArenaEngine {
             p.element
           );
 
-          // Real-World Combat DNA Knockback Impact
-          const attackerImpact = ownerFighter?.combatDna?.impactForce ?? 0.5;
-          const rawForce = 1.8 * (0.75 + attackerImpact * 0.85);
-          this.applyKnockback(fighter, p.x - p.vx * 0.05, p.z - p.vz * 0.05, rawForce);
+          // Real-World Combat DNA Knockback Impact or Custom Weapon Knockback
+          if (p.knockbackForce) {
+            this.applyKnockback(fighter, p.x, p.z, p.knockbackForce);
+          } else {
+            const attackerImpact = ownerFighter?.combatDna?.impactForce ?? 0.5;
+            const rawForce = 1.8 * (0.75 + attackerImpact * 0.85);
+            this.applyKnockback(fighter, p.x - p.vx * 0.05, p.z - p.vz * 0.05, rawForce);
+          }
 
-          if (!p.isPiercing && !p.isCyclone) {
+          // Weapon Status Effects: Burning
+          if (p.burnDuration) {
+            fighter.currentHp = Math.max(0, fighter.currentHp - 25);
+            this.damageFloaters.push({
+              id: `floater-burn-${Date.now()}-${Math.random()}`,
+              text: '🔥 BURNING (-25 HP)',
+              x: fighter.x,
+              y: fighter.y + 3.4,
+              z: fighter.z,
+              color: '#F97316',
+              isCrit: true,
+              opacity: 1.0,
+            });
+            if (fighter.currentHp <= 0) {
+              this.handleFighterElimination(fighter, p.ownerId === 'player' ? this.playerFighter.creature.name : 'Rival');
+            }
+          }
+
+          // Weapon Status Effects: Electric Stun
+          if (p.stunDuration) {
+            fighter.stunDuration = Math.max(fighter.stunDuration || 0, p.stunDuration);
+            this.damageFloaters.push({
+              id: `floater-stun-${Date.now()}-${Math.random()}`,
+              text: '⚡ STUNNED!',
+              x: fighter.x,
+              y: fighter.y + 3.6,
+              z: fighter.z,
+              color: '#FACC15',
+              isCrit: true,
+              opacity: 1.0,
+            });
+          }
+
+          // Weapon AoE Explosion Radius (Rocket Launcher, Megafist)
+          if (p.aoeRadius) {
+            this.fighters.forEach((splashTarget) => {
+              if (splashTarget.id === p.ownerId || splashTarget.id === fighter.id || splashTarget.isDead) return;
+              const splashDist = Math.hypot(splashTarget.x - p.x, splashTarget.z - p.z);
+              if (splashDist <= p.aoeRadius!) {
+                this.damageFighter(splashTarget, Math.round(finalDamage * 0.75), 'Blast Shockwave', true, p.element);
+                this.applyKnockback(splashTarget, p.x, p.z, 3.8);
+              }
+            });
+          }
+
+          // Multi-Pierce logic
+          if (p.pierceCount && p.pierceCount > 0) {
+            p.pierceCount--;
+            hit = false;
+          } else if (!p.isPiercing && !p.isCyclone) {
             hit = true;
             break;
           }
@@ -2570,6 +3830,8 @@ export class ThreeArenaEngine {
         isVictory: false,
         earnedXp: Math.round(this.matchDuration * 8 + this.playerFighter.kills * 60),
         earnedCoins: Math.round(this.matchDuration * 5 + this.playerFighter.kills * 40),
+        score: Math.round(this.matchDuration * 12 + this.playerFighter.kills * 150),
+        trophies: Math.max(5, this.playerFighter.kills * 5 + (rank <= 3 ? 10 : 2)),
         environmentUsed: this.currentEnvironment.name,
         materialAdvantageHits: this.materialAdvantageHits,
         voiceCommandsIssued: this.voiceCommandsIssued,
@@ -2583,17 +3845,20 @@ export class ThreeArenaEngine {
     if (aliveFighters.length === 1 && aliveFighters[0].isPlayer && this.isRunning) {
       this.isRunning = false;
       sound.playVictory();
+      const kills = this.playerFighter.kills;
       const stats: Arena3DMatchStats = {
         creatureName: this.playerFighter.creature.name,
         originalObject: this.playerFighter.creature.originalObject,
         rank: 1,
         totalCombatants: this.fighters.length,
-        kills: this.playerFighter.kills,
-        damageDealt: this.playerFighter.kills * 320 + Math.round(this.matchDuration * 25),
+        kills,
+        damageDealt: kills * 320 + Math.round(this.matchDuration * 25),
         survivalTimeSeconds: Math.round(this.matchDuration),
         isVictory: true,
-        earnedXp: 500 + this.playerFighter.kills * 100,
-        earnedCoins: 350 + this.playerFighter.kills * 75,
+        earnedXp: 500 + kills * 100,
+        earnedCoins: 350 + kills * 75,
+        score: 1000 + kills * 250 + Math.round(this.matchDuration * 20),
+        trophies: 35 + kills * 10,
         environmentUsed: this.currentEnvironment.name,
         materialAdvantageHits: this.materialAdvantageHits,
         voiceCommandsIssued: this.voiceCommandsIssued,

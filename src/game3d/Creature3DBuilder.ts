@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BattleCreature } from '../types/creature';
+import { getCreatureWeaponType } from './weaponSkillConfig';
 
 export interface Creature3DModel {
   root: THREE.Group;
@@ -571,27 +572,233 @@ export class Creature3DBuilder {
     rightBicep.position.y = -0.38 * scale;
     rightArmGroup.add(rightBicep);
 
-    // Heavy Weapon Arm (Megatron Fusion Cannon or Optimus Ion Blaster)
+    // Determine weapon type
+    const weaponType = getCreatureWeaponType(creature);
+
+    // Right Arm Weapon Mount
     const cannonGroup = new THREE.Group();
     cannonGroup.position.y = -0.65 * scale;
     rightArmGroup.add(cannonGroup);
 
-    const cannonBarrelGeo = new THREE.CylinderGeometry(0.18 * scale, 0.24 * scale, 1.1 * scale, 12);
-    disposables.push(cannonBarrelGeo);
-    cannonBarrelGeo.rotateX(Math.PI / 2);
-    const cannonBarrel = new THREE.Mesh(cannonBarrelGeo, chromeDetailMat);
-    cannonBarrel.position.set(0, 0, 0.35 * scale);
-    cannonGroup.add(cannonBarrel);
+    let muzzleGlow: THREE.Mesh;
 
-    // Glowing Weapon Emitter Muzzle
-    const muzzleGeo = new THREE.CylinderGeometry(0.12 * scale, 0.12 * scale, 0.08 * scale, 12);
-    disposables.push(muzzleGeo);
-    muzzleGeo.rotateX(Math.PI / 2);
-    const muzzleGlow = new THREE.Mesh(muzzleGeo, energonCoreMat);
-    muzzleGlow.position.set(0, 0, 0.92 * scale);
-    cannonGroup.add(muzzleGlow);
+    if (weaponType === 'swords') {
+      // Dual Swords: Long Energon Katana on Right Arm
+      const bladeLength = 1.4 * scale;
+      const swordBladeGeo = new THREE.BoxGeometry(0.08 * scale, bladeLength, 0.22 * scale);
+      disposables.push(swordBladeGeo);
+      swordBladeGeo.rotateX(Math.PI / 2);
+      const swordBlade = new THREE.Mesh(swordBladeGeo, energonCoreMat);
+      swordBlade.position.set(0, 0, 0.7 * scale);
+      cannonGroup.add(swordBlade);
 
-    // LEFT ARM: Armored Manipulator & Energon Shield/Blade
+      const hiltGeo = new THREE.CylinderGeometry(0.12 * scale, 0.12 * scale, 0.35 * scale, 8);
+      disposables.push(hiltGeo);
+      const hilt = new THREE.Mesh(hiltGeo, chromeDetailMat);
+      cannonGroup.add(hilt);
+
+      const tipGlowGeo = new THREE.ConeGeometry(0.12 * scale, 0.3 * scale, 6);
+      tipGlowGeo.rotateX(Math.PI / 2);
+      disposables.push(tipGlowGeo);
+      muzzleGlow = new THREE.Mesh(tipGlowGeo, energonCoreMat);
+      muzzleGlow.position.set(0, 0, 1.4 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'flamethrower') {
+      // Flamethrower: Dual fuel canisters and fluted nozzle
+      const tankGeo = new THREE.CylinderGeometry(0.2 * scale, 0.2 * scale, 0.8 * scale, 8);
+      disposables.push(tankGeo);
+      const tank = new THREE.Mesh(tankGeo, trimPlateMat);
+      tank.position.set(0.22 * scale, 0.2 * scale, 0);
+      cannonGroup.add(tank);
+
+      const flutedBarrelGeo = new THREE.CylinderGeometry(0.22 * scale, 0.16 * scale, 1.0 * scale, 10);
+      flutedBarrelGeo.rotateX(Math.PI / 2);
+      disposables.push(flutedBarrelGeo);
+      const barrel = new THREE.Mesh(flutedBarrelGeo, darkEndoskeletonMat);
+      barrel.position.set(0, 0, 0.45 * scale);
+      cannonGroup.add(barrel);
+
+      const igniterGeo = new THREE.SphereGeometry(0.15 * scale, 8, 8);
+      disposables.push(igniterGeo);
+      const igniterMat = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+      disposables.push(igniterMat);
+      muzzleGlow = new THREE.Mesh(igniterGeo, igniterMat);
+      muzzleGlow.position.set(0, 0, 1.0 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'double_guns') {
+      // Twin Blasters: Dual parallel barrels on right arm
+      const b1Geo = new THREE.CylinderGeometry(0.1 * scale, 0.1 * scale, 0.9 * scale, 8);
+      b1Geo.rotateX(Math.PI / 2);
+      disposables.push(b1Geo);
+      const b1 = new THREE.Mesh(b1Geo, chromeDetailMat);
+      b1.position.set(0.12 * scale, 0, 0.4 * scale);
+      const b2 = new THREE.Mesh(b1Geo, chromeDetailMat);
+      b2.position.set(-0.12 * scale, 0, 0.4 * scale);
+      cannonGroup.add(b1);
+      cannonGroup.add(b2);
+
+      const mGeo = new THREE.CylinderGeometry(0.14 * scale, 0.14 * scale, 0.08 * scale, 8);
+      mGeo.rotateX(Math.PI / 2);
+      disposables.push(mGeo);
+      muzzleGlow = new THREE.Mesh(mGeo, energonCoreMat);
+      muzzleGlow.position.set(0, 0, 0.88 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'mage_spell') {
+      // Mage: Arcane catalyst staff with floating rune focus ring
+      const staffGeo = new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 1.2 * scale, 8);
+      disposables.push(staffGeo);
+      const staff = new THREE.Mesh(staffGeo, chromeDetailMat);
+      cannonGroup.add(staff);
+
+      const runeOrbGeo = new THREE.SphereGeometry(0.24 * scale, 10, 10);
+      disposables.push(runeOrbGeo);
+      const runeMat = new THREE.MeshBasicMaterial({ color: 0xa855f7 });
+      disposables.push(runeMat);
+      muzzleGlow = new THREE.Mesh(runeOrbGeo, runeMat);
+      muzzleGlow.position.set(0, 0.65 * scale, 0.2 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'fighter') {
+      // Fighter: Spiked reinforced hydraulic brawling power knuckle
+      const knuckleGeo = new THREE.BoxGeometry(0.48 * scale, 0.45 * scale, 0.48 * scale);
+      disposables.push(knuckleGeo);
+      const knuckleMesh = new THREE.Mesh(knuckleGeo, armorPlateMat);
+      knuckleMesh.position.set(0, 0, 0.25 * scale);
+      cannonGroup.add(knuckleMesh);
+
+      const spikeGeo = new THREE.ConeGeometry(0.08 * scale, 0.3 * scale, 6);
+      spikeGeo.rotateX(Math.PI / 2);
+      disposables.push(spikeGeo);
+      for (let s = -1; s <= 1; s++) {
+        const spike = new THREE.Mesh(spikeGeo, chromeDetailMat);
+        spike.position.set(s * 0.15 * scale, 0, 0.55 * scale);
+        cannonGroup.add(spike);
+      }
+      muzzleGlow = new THREE.Mesh(spikeGeo, energonCoreMat);
+      muzzleGlow.position.set(0, 0, 0.65 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'archer_bow') {
+      // Archer: Forearm-mounted compound energy bow
+      const bowLimbGeo = new THREE.TorusGeometry(0.65 * scale, 0.06 * scale, 6, 12, Math.PI);
+      bowLimbGeo.rotateY(Math.PI / 2);
+      disposables.push(bowLimbGeo);
+      const bowLimb = new THREE.Mesh(bowLimbGeo, chromeDetailMat);
+      bowLimb.position.set(0, 0, 0.3 * scale);
+      cannonGroup.add(bowLimb);
+
+      const arrowGeo = new THREE.CylinderGeometry(0.06 * scale, 0.06 * scale, 1.1 * scale, 6);
+      arrowGeo.rotateX(Math.PI / 2);
+      disposables.push(arrowGeo);
+      muzzleGlow = new THREE.Mesh(arrowGeo, energonCoreMat);
+      muzzleGlow.position.set(0, 0, 0.55 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'magic_fist') {
+      // Magic Fist: Colossal oversized cybernetic spectral power fist
+      const fistGeo = new THREE.BoxGeometry(0.55 * scale, 0.55 * scale, 0.65 * scale);
+      disposables.push(fistGeo);
+      const fistMesh = new THREE.Mesh(fistGeo, trimPlateMat);
+      fistMesh.position.set(0, 0, 0.35 * scale);
+      cannonGroup.add(fistMesh);
+
+      const knuckleCoreGeo = new THREE.SphereGeometry(0.25 * scale, 8, 8);
+      disposables.push(knuckleCoreGeo);
+      const knuckleCoreMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+      disposables.push(knuckleCoreMat);
+      muzzleGlow = new THREE.Mesh(knuckleCoreGeo, knuckleCoreMat);
+      muzzleGlow.position.set(0, 0, 0.72 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'electric_stun_gun') {
+      // Electric Stun Gun: Twin Tesla stun prongs
+      const prongGeo = new THREE.CylinderGeometry(0.06 * scale, 0.06 * scale, 0.7 * scale, 6);
+      prongGeo.rotateX(Math.PI / 2);
+      disposables.push(prongGeo);
+      const p1 = new THREE.Mesh(prongGeo, chromeDetailMat);
+      p1.position.set(0.14 * scale, 0, 0.45 * scale);
+      const p2 = new THREE.Mesh(prongGeo, chromeDetailMat);
+      p2.position.set(-0.14 * scale, 0, 0.45 * scale);
+      cannonGroup.add(p1);
+      cannonGroup.add(p2);
+
+      const sparkNodeGeo = new THREE.SphereGeometry(0.12 * scale, 6, 6);
+      disposables.push(sparkNodeGeo);
+      const sparkNodeMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+      disposables.push(sparkNodeMat);
+      muzzleGlow = new THREE.Mesh(sparkNodeGeo, sparkNodeMat);
+      muzzleGlow.position.set(0, 0, 0.85 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'launcher') {
+      // Rocket Launcher: 4-tube cluster missile box
+      const boxGeo = new THREE.BoxGeometry(0.45 * scale, 0.45 * scale, 0.9 * scale);
+      disposables.push(boxGeo);
+      const box = new THREE.Mesh(boxGeo, darkEndoskeletonMat);
+      box.position.set(0, 0, 0.35 * scale);
+      cannonGroup.add(box);
+
+      const tubeGeo = new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 0.2 * scale, 8);
+      tubeGeo.rotateX(Math.PI / 2);
+      disposables.push(tubeGeo);
+      for (const [tx, ty] of [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12]]) {
+        const tube = new THREE.Mesh(tubeGeo, chromeDetailMat);
+        tube.position.set(tx * scale, ty * scale, 0.82 * scale);
+        cannonGroup.add(tube);
+      }
+      muzzleGlow = new THREE.Mesh(new THREE.SphereGeometry(0.14 * scale, 6, 6), energonCoreMat);
+      muzzleGlow.position.set(0, 0, 0.85 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'disk_thrower') {
+      // Disk Thrower: Forearm disk feeder and glowing plasma circular chakram
+      const magGeo = new THREE.BoxGeometry(0.42 * scale, 0.22 * scale, 0.7 * scale);
+      disposables.push(magGeo);
+      const mag = new THREE.Mesh(magGeo, chromeDetailMat);
+      mag.position.set(0, 0, 0.3 * scale);
+      cannonGroup.add(mag);
+
+      const diskGeo = new THREE.CylinderGeometry(0.35 * scale, 0.35 * scale, 0.05 * scale, 16);
+      disposables.push(diskGeo);
+      const diskMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+      disposables.push(diskMat);
+      muzzleGlow = new THREE.Mesh(diskGeo, diskMat);
+      muzzleGlow.position.set(0, 0.12 * scale, 0.65 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else if (weaponType === 'laser_gun') {
+      // Laser Gun: Long precision optic sniper rail-barrel
+      const railGeo = new THREE.BoxGeometry(0.18 * scale, 0.18 * scale, 1.4 * scale);
+      disposables.push(railGeo);
+      const rail = new THREE.Mesh(railGeo, chromeDetailMat);
+      rail.position.set(0, 0, 0.6 * scale);
+      cannonGroup.add(rail);
+
+      const scopeGeo = new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 0.45 * scale, 8);
+      scopeGeo.rotateX(Math.PI / 2);
+      disposables.push(scopeGeo);
+      const scope = new THREE.Mesh(scopeGeo, darkEndoskeletonMat);
+      scope.position.set(0, 0.16 * scale, 0.4 * scale);
+      cannonGroup.add(scope);
+
+      const lensGeo = new THREE.SphereGeometry(0.12 * scale, 8, 8);
+      disposables.push(lensGeo);
+      const lensMat = new THREE.MeshBasicMaterial({ color: 0x6366f1 });
+      disposables.push(lensMat);
+      muzzleGlow = new THREE.Mesh(lensGeo, lensMat);
+      muzzleGlow.position.set(0, 0, 1.35 * scale);
+      cannonGroup.add(muzzleGlow);
+    } else {
+      // Default Cannon Barrel
+      const cannonBarrelGeo = new THREE.CylinderGeometry(0.18 * scale, 0.24 * scale, 1.1 * scale, 12);
+      disposables.push(cannonBarrelGeo);
+      cannonBarrelGeo.rotateX(Math.PI / 2);
+      const cannonBarrel = new THREE.Mesh(cannonBarrelGeo, chromeDetailMat);
+      cannonBarrel.position.set(0, 0, 0.35 * scale);
+      cannonGroup.add(cannonBarrel);
+
+      const muzzleGeo = new THREE.CylinderGeometry(0.12 * scale, 0.12 * scale, 0.08 * scale, 12);
+      disposables.push(muzzleGeo);
+      muzzleGeo.rotateX(Math.PI / 2);
+      muzzleGlow = new THREE.Mesh(muzzleGeo, energonCoreMat);
+      muzzleGlow.position.set(0, 0, 0.92 * scale);
+      cannonGroup.add(muzzleGlow);
+    }
+
+    // LEFT ARM: Armored Manipulator & Off-Hand Weapon / Shield
     const leftArmGroup = new THREE.Group();
     leftArmGroup.position.set(-0.95 * scale, 0.35 * scale, 0);
     chestMesh.add(leftArmGroup);
@@ -611,13 +818,47 @@ export class Creature3DBuilder {
     leftForearm.position.y = -0.72 * scale;
     leftArmGroup.add(leftForearm);
 
-    // Energon Blade / Shield on Left Wrist
-    const bladeGeo = new THREE.ConeGeometry(0.14 * scale, 0.85 * scale, 4);
-    disposables.push(bladeGeo);
-    bladeGeo.rotateX(Math.PI / 2);
-    const bladeMesh = new THREE.Mesh(bladeGeo, energonCoreMat);
-    bladeMesh.position.set(0, -0.72 * scale, 0.45 * scale);
-    leftArmGroup.add(bladeMesh);
+    // Off-hand equipment based on weapon type
+    if (weaponType === 'swords') {
+      // Off-hand dual sword!
+      const offBladeGeo = new THREE.BoxGeometry(0.08 * scale, 1.2 * scale, 0.2 * scale);
+      offBladeGeo.rotateX(Math.PI / 2);
+      disposables.push(offBladeGeo);
+      const offBlade = new THREE.Mesh(offBladeGeo, energonCoreMat);
+      offBlade.position.set(0, -0.72 * scale, 0.55 * scale);
+      leftArmGroup.add(offBlade);
+    } else if (weaponType === 'double_guns') {
+      // Off-hand second blaster gun!
+      const leftGunGroup = new THREE.Group();
+      leftGunGroup.position.set(0, -0.72 * scale, 0.35 * scale);
+      const lgGeo = new THREE.CylinderGeometry(0.1 * scale, 0.1 * scale, 0.9 * scale, 8);
+      lgGeo.rotateX(Math.PI / 2);
+      disposables.push(lgGeo);
+      const lgMesh = new THREE.Mesh(lgGeo, chromeDetailMat);
+      leftGunGroup.add(lgMesh);
+      const lmGeo = new THREE.CylinderGeometry(0.12 * scale, 0.12 * scale, 0.08 * scale, 8);
+      lmGeo.rotateX(Math.PI / 2);
+      disposables.push(lmGeo);
+      const lmMesh = new THREE.Mesh(lmGeo, energonCoreMat);
+      lmMesh.position.set(0, 0, 0.48 * scale);
+      leftGunGroup.add(lmMesh);
+      leftArmGroup.add(leftGunGroup);
+    } else if (weaponType === 'fighter') {
+      // Off-hand matching spiked power knuckle!
+      const offKnuckleGeo = new THREE.BoxGeometry(0.45 * scale, 0.42 * scale, 0.45 * scale);
+      disposables.push(offKnuckleGeo);
+      const offKnuckle = new THREE.Mesh(offKnuckleGeo, armorPlateMat);
+      offKnuckle.position.set(0, -0.72 * scale, 0.25 * scale);
+      leftArmGroup.add(offKnuckle);
+    } else {
+      // Energon Blade / Shield on Left Wrist
+      const bladeGeo = new THREE.ConeGeometry(0.14 * scale, 0.85 * scale, 4);
+      disposables.push(bladeGeo);
+      bladeGeo.rotateX(Math.PI / 2);
+      const bladeMesh = new THREE.Mesh(bladeGeo, energonCoreMat);
+      bladeMesh.position.set(0, -0.72 * scale, 0.45 * scale);
+      leftArmGroup.add(bladeMesh);
+    }
 
     // ==========================================
     // 6. BIPEDAL STOMPING MECH LEGS & TREADS
@@ -954,22 +1195,24 @@ export class Creature3DBuilder {
 
       // Attack Animation: Aim Cannon & Recoil Kickback
       if (isAttacking) {
-        // Raise heavy weapon arm
+        // Raise heavy weapon arm with stable forward aim & solid recoil
         rightArmGroup.rotation.x = -Math.PI * 0.45;
-        rightArmGroup.position.z = Math.sin(time * 30) * 0.15 * scale;
+        rightArmGroup.position.z = -0.10 * scale;
         muzzleGlow.scale.set(2.2, 2.2, 2.2);
         chestMesh.rotation.x = -0.06; // Recoil lean back
       } else {
         muzzleGlow.scale.set(1, 1, 1);
+        if (!isMoving) {
+          rightArmGroup.position.z = 0;
+        }
       }
 
-      // Hit Reaction: Armor flash & twitch
+      // Hit Reaction: Armor flash & physical chest flinch (no coordinate jitter/vibration)
       if (isHit) {
-        robotRootGroup.position.x = (Math.random() - 0.5) * 0.25;
-        armorPlateMat.emissive.set(0xff0000);
+        chestMesh.rotation.x = -0.10;
+        armorPlateMat.emissive.set(0xff2200);
         armorPlateMat.emissiveIntensity = 0.85;
       } else {
-        robotRootGroup.position.x = 0;
         armorPlateMat.emissive.set(0x000000);
         armorPlateMat.emissiveIntensity = 0;
       }

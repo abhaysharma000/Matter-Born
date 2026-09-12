@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  MapPin,
   Zap,
   Trophy,
   Sparkles,
-  Star,
   RotateCcw,
   Camera,
   Anvil,
@@ -14,13 +12,12 @@ import {
   ChevronRight,
   ShieldCheck,
   CheckCircle2,
+  ExternalLink,
+  Radio,
 } from 'lucide-react';
 import { useExplorationSession } from '../../hooks/useExplorationSession';
 import { ExplorationMap } from './ExplorationMap';
-import {
-  EXPLORATION_MILESTONES,
-  MIN_STATIONARY_DURATION,
-} from '../../constants/explorationConfig';
+import { MIN_STATIONARY_DURATION } from '../../constants/explorationConfig';
 import { formatExplorationDistance } from '../../utils/geoUtils';
 import { ExplorationDiscoveryContext } from '../../types/exploration';
 import { ExplorationUpgradesModal } from './ExplorationUpgradesModal';
@@ -30,13 +27,6 @@ interface ExplorationScreenProps {
   onBackToLobby?: () => void;
   onNavigateToForge?: () => void;
 }
-
-const ADVENTURE_SUGGESTIONS = [
-  'Afternoon Park Walk',
-  'School Commute',
-  'Weekend Hike',
-  'Robot Hunt',
-];
 
 export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
   onOpenScanPipeline,
@@ -57,9 +47,9 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
     simulateWalkStep,
     simulateStopWalking,
     getDiscoveryContext,
+    isInIframe,
   } = useExplorationSession();
 
-  const [adventureInput, setAdventureInput] = useState('Afternoon Park Walk');
   const [showDemoTools, setShowDemoTools] = useState(false);
   const [showUpgradesModal, setShowUpgradesModal] = useState(false);
 
@@ -76,17 +66,22 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
     nextMilestone,
     breadcrumbs,
     isSimulated,
-    adventureName = 'Robot Hunt',
     explorationPoints = 0,
     sessionPointsEarned = 0,
   } = session;
 
+  // Auto-initialize expedition if not yet started so users don't have to fill out any form
+  useEffect(() => {
+    if (!origin && !permissionError && state === 'IDLE') {
+      startExpedition('Real-World Walk');
+    }
+  }, [origin, permissionError, state, startExpedition]);
+
   const handleStart = (isSim: boolean = false) => {
-    const finalName = adventureInput.trim() || 'My Adventure';
     if (isSim) {
-      startDevSimulatedExpedition(finalName);
+      startDevSimulatedExpedition('Satellite Rover');
     } else {
-      startExpedition(finalName);
+      startExpedition('Real-World Walk');
     }
   };
 
@@ -98,239 +93,146 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
     }
   };
 
-  // 5 simple milestone targets for child-friendly progress
-  const simpleMilestones = EXPLORATION_MILESTONES.slice(0, 5);
+  // Calculate progress percent to next reward
+  const progressPercent = nextMilestone
+    ? Math.min(100, Math.max(0, (distanceExplored / nextMilestone.distanceMeters) * 100))
+    : 100;
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-4 select-none pb-12 px-2 sm:px-4">
-      {/* 1. Header Banner */}
-      <div className="rounded-2xl bg-[#091B14] border border-[#144433] p-4 sm:p-5 shadow-lg relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black uppercase tracking-widest text-[#2BE29E]">
-                EXPLORE
-              </span>
-              {origin && (
-                <>
-                  <span className="text-[#1A5C43]">•</span>
-                  <span className="text-xs font-bold text-emerald-200 bg-[#0E2F23] px-2.5 py-0.5 rounded-full border border-[#18533C]">
-                    🧭 {adventureName}
-                  </span>
-                </>
-              )}
-              {isSimulated && (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-500/40">
-                  Simulated
-                </span>
-              )}
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-wide mt-0.5">
-              GO FARTHER. EARN MORE EP.
-            </h1>
-            <p className="text-xs text-[#6DAA8E] mt-0.5">
-              Walk in the real world to earn EP points and power up your robot in The Forge!
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {onNavigateToForge && (
-              <button
-                onClick={onNavigateToForge}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-amber-950 font-black text-xs uppercase tracking-wide flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
-                title="Spend your EP in The Forge"
-              >
-                <Anvil className="w-4 h-4 text-amber-950" />
-                <span>The Forge ({explorationPoints} EP)</span>
-              </button>
-            )}
-
-            {origin && (
-              <button
-                onClick={startNewExpedition}
-                className="px-3 py-2 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                title="Start a new adventure"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>New Adventure</span>
-              </button>
-            )}
-
-            <button
-              onClick={() => setShowDemoTools(!showDemoTools)}
-              className={`p-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                showDemoTools
-                  ? 'bg-emerald-600 text-white border-emerald-500'
-                  : 'bg-[#0E2F23] text-emerald-400 border-[#1E5F46] hover:text-white'
-              }`}
-              title="Toggle Dev Step Simulator"
-            >
-              <Sliders className="w-4 h-4" />
-            </button>
-          </div>
+    <div className="w-full max-w-5xl mx-auto space-y-3.5 select-none pb-12 px-2 sm:px-4">
+      {/* 1. Header Bar: Clean, Minimal, Uncluttered */}
+      <div className="rounded-2xl bg-[#091B14] border border-[#144433] p-3.5 sm:p-4 shadow-lg relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+          <h1 className="text-lg sm:text-xl font-black text-white tracking-wide">
+            REAL-WORLD EXPLORATION
+          </h1>
+          {isSimulated && (
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-500/40">
+              Virtual Rover
+            </span>
+          )}
         </div>
 
-        {/* Name Your Adventure (shown if adventure has not yet started) */}
-        {!origin && (
-          <div className="mt-4 pt-4 border-t border-[#144433] space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-emerald-300">
-              NAME YOUR ADVENTURE
-            </div>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-              <input
-                type="text"
-                value={adventureInput}
-                onChange={(e) => setAdventureInput(e.target.value)}
-                placeholder="Name your adventure..."
-                maxLength={30}
-                className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#071610] border border-[#1A5C43] text-white font-bold text-sm focus:outline-none focus:border-[#2BE29E] transition-colors placeholder:text-stone-500"
-              />
-              <button
-                onClick={() => handleStart(false)}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#2BE29E] to-[#1AB87E] hover:from-[#35EEA9] hover:to-[#22CA8C] text-[#072418] font-black text-sm uppercase tracking-wide shadow-lg shadow-emerald-950/50 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>START ADVENTURE</span>
-                <ChevronRight className="w-4 h-4 text-[#072418]" />
-              </button>
-            </div>
-            {/* Quick Name Suggestions */}
-            <div className="flex items-center gap-2 flex-wrap text-xs">
-              <span className="text-[#5A8E77] text-[11px]">Quick picks:</span>
-              {ADVENTURE_SUGGESTIONS.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => setAdventureInput(suggestion)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    adventureInput === suggestion
-                      ? 'bg-[#18533C] text-[#2BE29E] border border-[#2BE29E]'
-                      : 'bg-[#0B241B] text-emerald-300/80 hover:text-emerald-200 border border-[#144433]'
-                  }`}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onNavigateToForge && (
+            <button
+              onClick={onNavigateToForge}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-amber-950 font-black text-xs uppercase tracking-wide flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+              title="Spend your EP in The Forge"
+            >
+              <Anvil className="w-4 h-4 text-amber-950" />
+              <span>The Forge ({explorationPoints} EP)</span>
+            </button>
+          )}
+
+          {origin && (
+            <button
+              onClick={startNewExpedition}
+              className="px-2.5 py-1.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Reset current walk"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset Walk</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setShowDemoTools(!showDemoTools)}
+            className={`p-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+              showDemoTools
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : 'bg-[#0E2F23] text-emerald-400 border-[#1E5F46] hover:text-white'
+            }`}
+            title="Toggle Indoor Step Simulator"
+          >
+            <Sliders className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* 2. Three Primary Metrics (Part 6) */}
+      {/* 2. The 3 Essential Metrics: EP We Have, EP Collecting, Next Reward */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Metric 1: You've Gone */}
-        <div className="p-4 rounded-2xl bg-[#091B14] border border-[#144433] shadow-md flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-[#0E2F23] border border-[#1B563F] flex items-center justify-center text-xl shrink-0">
-            📍
+        {/* Metric 1: EP WE HAVE */}
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-[#091B14] border border-[#144433] shadow-md flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-xl text-amber-400 shrink-0 shadow-inner">
+            <Zap className="w-5 h-5 text-amber-400 fill-amber-400" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="text-[11px] font-black uppercase tracking-wider text-[#6DAA8E]">
-              YOU'VE GONE
+              EP WE HAVE
             </div>
-            <div className="font-mono font-black text-2xl sm:text-3xl text-white">
-              {formatExplorationDistance(distanceExplored)}
-            </div>
-          </div>
-        </div>
-
-        {/* Metric 2: EP Earned */}
-        <div className="p-4 rounded-2xl bg-[#091B14] border border-[#144433] shadow-md flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-xl text-amber-400 shrink-0">
-            ⚡
-          </div>
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-wider text-[#6DAA8E]">
-              EXPLORATION POINTS
-            </div>
-            <div className="font-mono font-black text-2xl sm:text-3xl text-amber-400">
+            <div className="font-mono font-black text-2xl sm:text-3xl text-amber-400 truncate">
               {explorationPoints} <span className="text-sm font-sans font-bold text-amber-300/80">EP</span>
             </div>
-            {sessionPointsEarned > 0 && (
-              <div className="text-[10px] font-bold text-[#2BE29E]">
-                +{sessionPointsEarned} earned this walk!
-              </div>
-            )}
+            <div className="text-[10px] font-bold text-[#6DAA8E] truncate">
+              Total available in Forge
+            </div>
           </div>
         </div>
 
-        {/* Metric 3: Next Reward */}
-        <div className="p-4 rounded-2xl bg-[#091B14] border border-[#144433] shadow-md flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-[#0E2F23] border border-[#1B563F] flex items-center justify-center text-xl text-emerald-400 shrink-0">
-            🏆
+        {/* Metric 2: EP WE ARE COLLECTING */}
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-[#091B14] border border-[#144433] shadow-md flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-xl text-[#2BE29E] shrink-0 shadow-inner">
+            <Sparkles className="w-5 h-5 text-[#2BE29E]" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-black uppercase tracking-wider text-[#6DAA8E]">
+              EP COLLECTING
+            </div>
+            <div className="font-mono font-black text-2xl sm:text-3xl text-[#2BE29E] truncate">
+              +{sessionPointsEarned} <span className="text-sm font-sans font-bold text-emerald-300/80">EP</span>
+            </div>
+            <div className="text-[10px] font-bold text-emerald-300/80 truncate">
+              {formatExplorationDistance(distanceExplored)} walked this session
+            </div>
+          </div>
+        </div>
+
+        {/* Metric 3: NEXT REWARD */}
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-[#091B14] border border-[#144433] shadow-md flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-[#0E2F23] border border-[#1B563F] flex items-center justify-center text-xl text-amber-400 shrink-0 shadow-inner">
+            <Trophy className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="min-w-0 flex-1">
             <div className="text-[11px] font-black uppercase tracking-wider text-[#6DAA8E]">
               NEXT REWARD
             </div>
-            <div className="font-mono font-black text-2xl sm:text-3xl text-[#2BE29E]">
-              {nextMilestone ? formatExplorationDistance(nextMilestone.distanceMeters) : 'MAX REACHED'}
+            <div className="font-mono font-black text-2xl sm:text-3xl text-white truncate">
+              {nextMilestone ? formatExplorationDistance(nextMilestone.distanceMeters) : 'MAX TIER'}
             </div>
-            {nextMilestone && distanceExplored < nextMilestone.distanceMeters && (
-              <div className="text-[10px] font-bold text-[#6DAA8E]">
-                {Math.max(0, nextMilestone.distanceMeters - distanceExplored)}m to go!
+            <div className="text-[10px] font-bold text-emerald-400 truncate">
+              {nextMilestone
+                ? `${Math.max(0, nextMilestone.distanceMeters - distanceExplored)}m to go (+${nextMilestone.explorationPointsReward} EP)`
+                : 'All rewards unlocked!'}
+            </div>
+            {/* Progress bar */}
+            {nextMilestone && (
+              <div className="w-full h-1.5 bg-[#071610] rounded-full mt-1.5 overflow-hidden border border-[#144433]">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 to-[#2BE29E] rounded-full transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* 3. Visual Star Milestone Bar (Part 7) */}
-      <div className="p-3.5 sm:p-4 rounded-2xl bg-[#091B14] border border-[#144433] shadow-md space-y-2.5">
-        <div className="flex items-center justify-between text-xs font-bold text-emerald-300">
-          <span className="flex items-center gap-1.5">
-            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-            <span>ADVENTURE MILESTONES</span>
-          </span>
-          <span className="text-[#6DAA8E] text-[11px]">Walk to reach the next star!</span>
-        </div>
-
-        <div className="grid grid-cols-5 gap-2">
-          {simpleMilestones.map((milestone) => {
-            const isReached = distanceExplored >= milestone.distanceMeters;
-            return (
-              <div
-                key={milestone.distanceMeters}
-                className={`py-2 px-1 rounded-xl border text-center transition-all ${
-                  isReached
-                    ? 'bg-[#124230] border-[#2BE29E] text-white shadow-sm'
-                    : 'bg-[#071610] border-[#143B2C] text-[#4F7E68]'
-                }`}
-              >
-                <div className="flex items-center justify-center mb-0.5">
-                  <Star
-                    className={`w-4 h-4 ${
-                      isReached ? 'text-amber-400 fill-amber-400 animate-bounce-gentle' : 'text-[#2E5E4A]'
-                    }`}
-                  />
-                </div>
-                <div className="font-mono font-black text-xs">
-                  {formatExplorationDistance(milestone.distanceMeters)}
-                </div>
-                <div
-                  className={`text-[10px] font-bold mt-0.5 ${
-                    isReached ? 'text-amber-300' : 'text-[#4F7E68]'
-                  }`}
-                >
-                  +{milestone.explorationPointsReward} EP
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 4. Reward Toast */}
+      {/* 3. Reward Toast Notification */}
       {recentReward && (
-        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 text-amber-950 font-bold text-xs flex items-center justify-between shadow-lg border-2 border-amber-500">
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 text-amber-950 font-bold text-xs flex items-center justify-between shadow-lg border-2 border-amber-500 animate-in fade-in">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-amber-900 text-amber-200 flex items-center justify-center font-black text-base shadow-sm shrink-0">
               ⚡
             </div>
             <div>
               <div className="font-black text-sm tracking-wide">
-                +{recentReward.epAmount} EP EARNED!
+                +{recentReward.epAmount} EP COLLECTED!
               </div>
               <div className="text-[11px] text-amber-900/90 font-semibold mt-0.5">
                 {recentReward.milestoneReached
-                  ? `Reached Milestone: ${recentReward.milestoneTitle || 'Discovery Star'}`
+                  ? `Reached Milestone: ${recentReward.milestoneTitle || 'Discovery Milestone'}`
                   : `Walked ${recentReward.distanceMeters}m from start`}
               </div>
             </div>
@@ -341,7 +243,7 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
                 onClick={onNavigateToForge}
                 className="px-3 py-1.5 rounded-xl bg-amber-950 hover:bg-amber-900 text-amber-100 font-black text-xs uppercase transition-all shadow-xs cursor-pointer active:scale-95"
               >
-                Forge
+                Spend in Forge
               </button>
             )}
             <button
@@ -354,43 +256,63 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
         </div>
       )}
 
-      {/* 5. Permission / GPS Alert */}
+      {/* 4. Location Access / Fallback (If GPS permission is denied or pending) */}
       {(permissionError || gpsStatus === 'GPS DENIED') && (
-        <div className="p-4 rounded-2xl bg-[#2A1608] border border-amber-600/60 text-amber-200 space-y-2.5">
-          <div className="flex items-start gap-2.5">
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#1D1007] border border-amber-600/70 text-amber-200 space-y-3 shadow-xl">
+          <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-black text-sm text-white">LOCATION ACCESS NEEDED</h3>
-              <p className="text-xs text-amber-300/90 mt-0.5">
-                Turn on location to explore outdoors and earn EP points as you walk.
+            <div className="space-y-1.5 flex-1">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-black text-sm text-white tracking-wide">
+                  GPS PERMISSION NOTICE
+                </h3>
+                {isInIframe && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    Embedded Browser Preview
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-amber-200/90 leading-relaxed">
+                {permissionError || 'Location permission was not granted or is not available in this context.'}
               </p>
+              <div className="text-[11px] text-amber-300/80 bg-black/40 p-2.5 rounded-xl border border-amber-500/20">
+                To use native GPS, open the app directly in its own tab, or tap <span className="font-bold text-emerald-300">Play Virtual Rover</span> to explore instantly right here!
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2.5 pt-1 flex-wrap">
             <button
-              onClick={() => handleStart(false)}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase cursor-pointer"
+              onClick={() => window.open(window.location.href, '_blank')}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-black uppercase tracking-wide flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
             >
-              Try Again
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Open in Dedicated Tab for GPS</span>
             </button>
             <button
               onClick={() => handleStart(true)}
-              className="px-4 py-2 rounded-xl bg-[#144433] hover:bg-[#1A5C43] text-emerald-200 text-xs font-bold cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black uppercase tracking-wide flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
             >
-              Use Simulator
+              <Radio className="w-3.5 h-3.5" />
+              <span>Play Virtual Satellite Rover</span>
+            </button>
+            <button
+              onClick={() => handleStart(false)}
+              className="px-3.5 py-2 rounded-xl bg-[#2A1608] hover:bg-[#381F0C] text-amber-300 text-xs font-bold border border-amber-600/40 transition-all cursor-pointer"
+            >
+              Retry GPS
             </button>
           </div>
         </div>
       )}
 
-      {/* 6. DEV ONLY SIMULATION DRAWER (Kept tidy and compact) */}
+      {/* 5. Indoor Step Simulator Drawer (Toggleable for testing) */}
       {showDemoTools && (
         <div className="p-3.5 rounded-2xl bg-[#091B14] border border-amber-500/40 text-amber-200 space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sliders className="w-4 h-4 text-amber-400" />
               <span className="font-black text-xs uppercase tracking-wider text-amber-300">
-                DEV STEP SIMULATOR
+                INDOOR STEP SIMULATOR
               </span>
             </div>
             <span className="text-[11px] text-[#6DAA8E]">For testing indoors</span>
@@ -444,8 +366,8 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
         </div>
       )}
 
-      {/* 7. The Map: HERO of the Screen */}
-      <div className="w-full h-[380px] sm:h-[460px] relative rounded-2xl overflow-hidden border border-[#18533C] shadow-2xl">
+      {/* 6. The Map: Full Hero Experience */}
+      <div className="w-full h-[480px] sm:h-[540px] md:h-[600px] relative rounded-2xl overflow-hidden border border-[#18533C] shadow-2xl">
         <ExplorationMap
           origin={origin}
           currentLocation={currentLocation}
@@ -461,16 +383,9 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
         />
       </div>
 
-      {/* 8. Scan Object CTA & Action State */}
+      {/* 7. Scan Object CTA & Action State (Unlocks as user walks) */}
       <div className="rounded-2xl bg-[#091B14] border border-[#144433] p-4 shadow-md space-y-3">
-        {!origin ? (
-          <div className="flex items-center justify-between gap-3 text-xs text-emerald-300">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-[#2BE29E]" />
-              <span>Name your adventure above and tap <strong>START ADVENTURE</strong> to explore.</span>
-            </div>
-          </div>
-        ) : state === 'WAITING_FOR_STATIONARY' || (!isStationary && activeMilestone) ? (
+        {state === 'WAITING_FOR_STATIONARY' || (!isStationary && activeMilestone) ? (
           <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <span className="text-xl">🛑</span>

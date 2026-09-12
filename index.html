@@ -2,6 +2,48 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Filter benign Vite HMR websocket messages and errors in sandboxed preview iframe
+      (function() {
+        function isViteMessage(msg) {
+          if (!msg) return false;
+          var str = typeof msg === 'string' ? msg : (msg.message || msg.reason || String(msg));
+          return str.indexOf('[vite]') !== -1 || str.indexOf('vite:') !== -1 || str.indexOf('WebSocket closed without opened') !== -1;
+        }
+
+        var origError = console.error;
+        console.error = function() {
+          for (var i = 0; i < arguments.length; i++) {
+            if (isViteMessage(arguments[i])) return;
+          }
+          origError.apply(console, arguments);
+        };
+
+        var origWarn = console.warn;
+        console.warn = function() {
+          for (var i = 0; i < arguments.length; i++) {
+            if (isViteMessage(arguments[i])) return;
+          }
+          origWarn.apply(console, arguments);
+        };
+
+        window.addEventListener('error', function(e) {
+          if (isViteMessage(e.message) || isViteMessage(e.error)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          if (isViteMessage(e.reason)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0D281E" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -21,25 +63,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script>
-      // Filter benign Vite HMR websocket messages in sandboxed preview iframe
-      (function() {
-        const origError = console.error;
-        console.error = function(...args) {
-          if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('[vite]')) {
-            return;
-          }
-          origError.apply(console, args);
-        };
-        const origWarn = console.warn;
-        console.warn = function(...args) {
-          if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('[vite]')) {
-            return;
-          }
-          origWarn.apply(console, args);
-        };
-      })();
-    </script>
   </head>
   <body class="bg-[#0D281E] text-white font-sans antialiased overflow-x-hidden selection:bg-emerald-500/30 selection:text-emerald-200">
     <div id="root"></div>

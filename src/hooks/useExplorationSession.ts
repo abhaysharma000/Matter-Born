@@ -434,7 +434,14 @@ export function useExplorationSession() {
       (err) => {
         console.warn('Geolocation watch error:', err);
         if (err.code === err.PERMISSION_DENIED) {
-          setPermissionError('LOCATION ACCESS REQUIRED: Exploration Mode uses your device location to measure real-world exploration.');
+          const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+          if (isInIframe) {
+            setPermissionError(
+              'EMBEDDED PREVIEW DETECTED: Web browsers restrict location prompts inside iframes. Open the app in a new tab for native device GPS, or tap "Start Virtual Satellite Rover" to play immediately!'
+            );
+          } else {
+            setPermissionError('LOCATION ACCESS REQUIRED: Location permission is needed for outdoor GPS tracking. You can also explore with Virtual Satellite Rover.');
+          }
           setSession((s) => ({ ...s, gpsStatus: 'GPS DENIED', state: 'IDLE' }));
         } else {
           setSession((s) => ({ ...s, gpsStatus: 'GPS UNAVAILABLE', gpsStatusMessage: err.message }));
@@ -527,10 +534,19 @@ export function useExplorationSession() {
       (err) => {
         console.warn('Initial geolocation failed:', err);
         if (err.code === err.PERMISSION_DENIED) {
-          setPermissionError('LOCATION ACCESS REQUIRED: Exploration Mode uses your device location to measure real-world exploration.');
+          const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+          if (isInIframe) {
+            setPermissionError(
+              'EMBEDDED PREVIEW DETECTED: Web browsers restrict location prompts inside iframes, so no permission prompt appears in settings. Open in a dedicated tab to grant device GPS, or start instantly with Virtual Satellite Rover!'
+            );
+          } else {
+            setPermissionError(
+              'LOCATION ACCESS DENIED: Device location permission is needed for outdoor GPS mode. You can open site settings to allow location, or explore instantly with Virtual Satellite Rover!'
+            );
+          }
           setSession((s) => ({ ...s, state: 'IDLE', gpsStatus: 'GPS DENIED' }));
         } else {
-          setPermissionError('GPS SIGNAL UNAVAILABLE: Unable to acquire GPS lock. Move to an open area outdoors.');
+          setPermissionError('GPS SIGNAL UNAVAILABLE: Unable to acquire GPS lock. Move to an open area outdoors, or switch to Virtual Satellite Rover.');
           setSession((s) => ({ ...s, state: 'IDLE', gpsStatus: 'GPS UNAVAILABLE', gpsStatusMessage: err.message }));
         }
       },
@@ -795,6 +811,7 @@ export function useExplorationSession() {
     clearRecentReward,
     startExpedition,
     startDevSimulatedExpedition,
+    startVirtualExpedition: startDevSimulatedExpedition,
     startNewExpedition,
     openScanMode,
     handleScanCompleted,
@@ -803,5 +820,7 @@ export function useExplorationSession() {
     simulateStopWalking,
     isSimulatingWalk,
     getDiscoveryContext,
+    isInIframe: typeof window !== 'undefined' && window.self !== window.top,
+    clearPermissionError: () => setPermissionError(null),
   };
 }

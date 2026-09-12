@@ -158,6 +158,7 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
   const [viewMode, setViewMode] = useState<'map' | 'radar'>('map');
   const [selectedZone, setSelectedZone] = useState<DiscoveryZone | null>(null);
   const isInitialCenteringDone = useRef<boolean>(false);
+  const [recenterToast, setRecenterToast] = useState<string | null>(null);
 
   // Determine effective coordinates for fallback / initial center
   const defaultCoord = useMemo<[number, number]>(() => {
@@ -165,6 +166,15 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
     if (origin) return [origin.latitude, origin.longitude];
     return [37.7955, -122.3937];
   }, [currentLocation?.latitude, currentLocation?.longitude, origin?.latitude, origin?.longitude]);
+
+  // Zoom handlers for custom on-map controls
+  const handleZoomIn = useCallback(() => {
+    mapInstanceRef.current?.zoomIn();
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    mapInstanceRef.current?.zoomOut();
+  }, []);
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -174,8 +184,8 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       const map = L.map(mapContainerRef.current, {
         center: defaultCoord,
         zoom: 16,
-        zoomControl: true,
-        attributionControl: true,
+        zoomControl: false, // Prevents default top-left buttons from colliding with UI
+        attributionControl: false,
       });
 
       const tileLayer = L.tileLayer(OPENSTREETMAP_CONFIG.url, {
@@ -192,12 +202,16 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       tileLayer.addTo(map);
       tileLayerRef.current = tileLayer;
 
+      // Invalidate size shortly after mount to ensure smooth immediate rendering
+      const timer = setTimeout(() => {
+        map.invalidateSize();
+      }, 150);
+
       // Handle user pan/drag: switch to manual map mode so the map doesn't snap back
       map.on('dragstart', () => {
         setIsFollowMode(false);
       });
       map.on('zoomstart', (e: L.LeafletEvent) => {
-        // If triggered by user interaction
         const originalEvent = (e as any).originalEvent;
         if (originalEvent) {
           setIsFollowMode(false);
@@ -215,6 +229,10 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       breadcrumbPolylineRef.current = polyline;
 
       mapInstanceRef.current = map;
+
+      return () => {
+        clearTimeout(timer);
+      };
     } catch (err) {
       console.warn('Leaflet map initialization notice:', err);
       setTileErrorDetected(true);
@@ -370,6 +388,10 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       map.setView([origin.latitude, origin.longitude], 16, { animate: true });
       setIsFollowMode(true);
     }
+    setRecenterToast('Map centered on player');
+    setTimeout(() => {
+      setRecenterToast(null);
+    }, 1800);
   }, [currentLocation, origin]);
 
   return (
@@ -418,45 +440,50 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         </div>
       )}
 
-      {/* 4. Top Floating Navigation & Telemetry Bar */}
+      {/* 4. Top Floating Navigation & Telemetry Bar (Zero overlaps) */}
       <div className="absolute top-3 left-3 right-3 pointer-events-none flex items-center justify-between gap-2 z-10">
-        {/* Left: GPS Live Status Badge */}
-        <div className="pointer-events-auto px-3 py-1.5 rounded-xl bg-[#0E1B13]/85 backdrop-blur-md border border-emerald-500/30 text-emerald-200 text-xs flex items-center gap-2 shadow-lg">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+        {/* Left: GPS Live Telemetry Status Badge */}
+        <div className="pointer-events-auto px-3 py-1.5 rounded-xl bg-[#0E1B13]/90 backdrop-blur-md border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2 shadow-lg">
+          <div className={`w-2 h-2 rounded-full ${gpsStatus === 'GPS DENIED' ? 'bg-rose-400' : 'bg-emerald-400 animate-ping'}`} />
           <span className="font-mono font-bold tracking-wider text-[11px]">
-            {viewMode === 'map' ? 'MAP VIEW' : 'RADAR VIEW'}
+            {gpsStatus === 'GPS DENIED' ? 'GPS OFFLINE' : 'LIVE GPS'}
           </span>
+          {currentLocation && (
+            <span className="text-[10px] text-emerald-400 font-mono hidden sm:inline border-l border-emerald-800 pl-2">
+              ±{Math.round(currentLocation.accuracy)}m
+            </span>
+          )}
         </div>
 
-        {/* Right: Distance & Controls */}
+        {/* Right: Distance & Instant Recenter Controls */}
         <div className="pointer-events-auto flex items-center gap-1.5">
-          {/* Recenter Button */}
+          {/* Always-Visible Recenter Button */}
           <button
             onClick={handleRecenter}
-            className={`px-2.5 py-1.5 rounded-xl backdrop-blur-md border text-xs font-bold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl backdrop-blur-md border text-xs font-black flex items-center gap-1.5 shadow-xl transition-all cursor-pointer active:scale-95 ${
               isFollowMode
-                ? 'bg-[#0E1B13]/85 border-emerald-500/30 text-emerald-300'
-                : 'bg-amber-500 text-amber-950 border-amber-400 animate-bounce-gentle'
+                ? 'bg-emerald-800/80 border-emerald-400/60 text-emerald-100 hover:bg-emerald-700'
+                : 'bg-amber-500 text-amber-950 border-amber-300 hover:bg-amber-400 animate-pulse'
             }`}
-            title={isFollowMode ? 'Follow Mode Active' : 'Recenter map on player'}
+            title="Recenter map on your position immediately"
           >
             <Crosshair className="w-3.5 h-3.5" />
-            <span className="text-[11px] font-mono">
-              {isFollowMode ? 'FOLLOWING' : 'RECENTER'}
+            <span className="text-[11px] font-mono font-bold tracking-wider">
+              RECENTER
             </span>
           </button>
 
           {/* View Mode Toggle (OSM Map vs Radar) */}
           <button
             onClick={() => setViewMode(viewMode === 'map' ? 'radar' : 'map')}
-            className="p-1.5 rounded-xl bg-[#0E1B13]/85 backdrop-blur-md border border-emerald-500/30 text-emerald-300 hover:text-white shadow-lg transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl bg-[#0E1B13]/90 backdrop-blur-md border border-emerald-500/40 text-emerald-300 hover:text-white shadow-lg transition-colors cursor-pointer"
             title={viewMode === 'map' ? 'Switch to Radar View' : 'Switch to Street Map'}
           >
             <Layers className="w-4 h-4" />
           </button>
 
           {/* Distance Counter Badge */}
-          <div className="px-2.5 py-1.5 rounded-xl bg-[#0E1B13]/85 backdrop-blur-md border border-emerald-500/30 text-xs text-white flex items-center gap-1.5 shadow-lg">
+          <div className="px-2.5 py-1.5 rounded-xl bg-[#0E1B13]/90 backdrop-blur-md border border-emerald-500/40 text-xs text-white flex items-center gap-1.5 shadow-lg">
             <Compass className="w-3.5 h-3.5 text-emerald-400" />
             <span className="font-mono text-[11px] font-bold">
               {formatExplorationDistance(distanceExplored)}
@@ -464,6 +491,53 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
           </div>
         </div>
       </div>
+
+      {/* Floating Action Controls on Right Side (Easy access Recenter FAB & Zoom) */}
+      {viewMode === 'map' && (
+        <div className="absolute right-3.5 top-16 z-20 flex flex-col items-center gap-2 pointer-events-auto">
+          {/* Quick Recenter FAB */}
+          <button
+            onClick={handleRecenter}
+            className={`w-9 h-9 rounded-xl backdrop-blur-md border flex items-center justify-center shadow-2xl transition-all cursor-pointer active:scale-90 ${
+              isFollowMode
+                ? 'bg-[#0E1B13]/90 border-emerald-500/50 text-emerald-300 hover:text-white hover:border-emerald-400'
+                : 'bg-amber-500 text-amber-950 border-amber-300 animate-bounce-gentle'
+            }`}
+            title="Recenter on player position"
+            aria-label="Recenter on player"
+          >
+            <Crosshair className="w-4 h-4" />
+          </button>
+
+          {/* Custom Cyber Zoom In / Zoom Out */}
+          <div className="flex flex-col rounded-xl overflow-hidden border border-emerald-500/40 bg-[#0E1B13]/90 backdrop-blur-md shadow-2xl">
+            <button
+              onClick={handleZoomIn}
+              className="w-9 h-9 flex items-center justify-center text-emerald-200 hover:text-white hover:bg-emerald-800/50 text-base font-bold border-b border-emerald-500/30 transition-colors cursor-pointer"
+              title="Zoom In"
+              aria-label="Zoom In"
+            >
+              +
+            </button>
+            <button
+              onClick={handleZoomOut}
+              className="w-9 h-9 flex items-center justify-center text-emerald-200 hover:text-white hover:bg-emerald-800/50 text-base font-bold transition-colors cursor-pointer"
+              title="Zoom Out"
+              aria-label="Zoom Out"
+            >
+              −
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Recenter confirmation toast */}
+      {recenterToast && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-[#08120B]/95 border border-emerald-400 text-emerald-200 text-xs font-bold shadow-2xl flex items-center gap-1.5 animate-in fade-in zoom-in duration-150">
+          <Crosshair className="w-3.5 h-3.5 text-emerald-400" />
+          <span>{recenterToast}</span>
+        </div>
+      )}
 
       {/* 5. Bottom Contextual Status & Safety Banner */}
       <div className="absolute bottom-3 left-3 right-3 pointer-events-none z-10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">

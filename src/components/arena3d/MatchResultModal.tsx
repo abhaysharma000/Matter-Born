@@ -1,6 +1,18 @@
-import React from 'react';
-import { Trophy, Skull, Swords, Clock, Sparkles, RefreshCw, Play, Home, ArrowRight } from 'lucide-react';
+import React, { useEffect } from 'react';
+import {
+  Trophy,
+  Swords,
+  Clock,
+  Sparkles,
+  RefreshCw,
+  Play,
+  Home,
+  Star,
+  Coins,
+  Zap,
+} from 'lucide-react';
 import { Arena3DMatchStats } from '../../types/creature';
+import { sound } from '../../utils/audio';
 
 interface MatchResultModalProps {
   stats: Arena3DMatchStats;
@@ -15,144 +27,170 @@ export const MatchResultModal: React.FC<MatchResultModalProps> = ({
   onSnapNewObject,
   onReturnToLobby,
 }) => {
+  useEffect(() => {
+    if (stats.isVictory) {
+      sound.playBonus();
+    }
+  }, [stats.isVictory]);
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs overflow-y-auto animate-fadeIn">
-      <div className="w-full max-w-md rounded-2xl bg-[#091B14] border border-[#184635] p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl text-center relative my-auto max-h-[92vh] overflow-y-auto text-white">
-        
-        {/* Banner */}
-        <div className="space-y-2">
-          {stats.isVictory ? (
-            <div className="inline-flex p-3 rounded-full bg-[#0E281E] text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/10 animate-bounce">
-              <Trophy className="w-10 h-10" />
-            </div>
-          ) : (
-            <div className="inline-flex p-3 rounded-full bg-rose-950/70 text-rose-400 border border-rose-600/40 shadow-lg">
-              <Skull className="w-10 h-10" />
-            </div>
-          )}
+  const trophiesWon = stats.trophies ?? (stats.isVictory ? 35 + stats.kills * 5 : Math.max(5, stats.kills * 5));
+  const starsCount = stats.isVictory ? 3 : stats.rank <= 3 ? 2 : 1;
 
-          <h2 className={`text-2xl sm:text-3xl font-black font-heading tracking-wide ${stats.isVictory ? 'text-amber-300' : 'text-white'}`}>
-            {stats.isVictory ? 'ARENA CHAMPION!' : 'SURVIVAL ENDED'}
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-xs animate-fadeIn">
+      <div className="w-full max-w-sm sm:max-w-md rounded-3xl bg-gradient-to-b from-[#0B241B] via-[#071912] to-[#040E0A] border-2 border-[#2BE29E]/50 p-4 sm:p-5 shadow-2xl text-center relative overflow-hidden text-white my-auto">
+        
+        {/* Glowing Ambient Backdrop Accent */}
+        <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-[#2BE29E]/20 rounded-full blur-2xl pointer-events-none" />
+
+        {/* Victory / Defeat Header */}
+        <div className="relative space-y-1.5 pt-1">
+          {/* Stars Celebration */}
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            {[1, 2, 3].map((starNum) => (
+              <div
+                key={starNum}
+                className={`transition-all duration-500 transform ${
+                  starNum <= starsCount
+                    ? 'text-amber-400 scale-110 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]'
+                    : 'text-stone-700 scale-90'
+                }`}
+              >
+                <Star className={`w-6 h-6 sm:w-7 sm:h-7 ${starNum <= starsCount ? 'fill-amber-400' : 'fill-stone-800'}`} />
+              </div>
+            ))}
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#103D2C] border border-[#2BE29E]/60 text-xs font-black tracking-wider uppercase text-[#2BE29E]">
+            {stats.isVictory ? (
+              <>
+                <Trophy className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                <span>#1 ARENA CHAMPION!</span>
+              </>
+            ) : (
+              <>
+                <span>RANK #{stats.rank} OF {stats.totalCombatants}</span>
+              </>
+            )}
+          </div>
+
+          <h2 className={`text-2xl sm:text-3xl font-black font-heading tracking-wide ${stats.isVictory ? 'text-amber-300 drop-shadow-sm' : 'text-white'}`}>
+            {stats.isVictory ? 'VICTORY!' : 'GREAT MATCH!'}
           </h2>
 
-          <div className="inline-block px-3 py-1 rounded-full bg-[#0E281E] border border-[#1C4D3A] text-xs font-bold text-[#2BE29E]">
-            Rank #{stats.rank} of {stats.totalCombatants} Fighters
-          </div>
+          <p className="text-xs text-[#A1D2BC] font-semibold truncate max-w-[280px] sm:max-w-[340px] mx-auto">
+            🤖 <span className="text-white font-bold">{stats.creatureName}</span>
+          </p>
         </div>
 
-        {/* Creature Recap */}
-        <div className="p-3 rounded-xl bg-[#071610] border border-[#143B2C] space-y-1">
-          <div className="text-xs text-[#6DAA8E]">Battle Robot</div>
-          <div className="text-base font-black text-white">{stats.creatureName}</div>
-          <div className="text-xs text-[#A1D2BC]">
-            Transformed from: <span className="text-[#2BE29E] font-semibold">{stats.originalObject}</span>
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-3 gap-2 text-left">
-          <div className="p-3 rounded-xl bg-[#071610] border border-[#143B2C] space-y-1">
-            <div className="flex items-center gap-1 text-[10px] uppercase font-bold text-[#6DAA8E]">
+        {/* Rewards & Stats 4-Box Grid (Clean, colorful, satisfying) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 my-3.5">
+          {/* Kills */}
+          <div className="p-2.5 rounded-2xl bg-[#092218] border border-[#165039] flex flex-col items-center justify-center">
+            <div className="flex items-center gap-1 text-[10px] font-bold text-amber-300 uppercase">
               <Swords className="w-3 h-3 text-amber-400" />
-              <span>Kills</span>
+              <span>KOs</span>
             </div>
-            <div className="text-lg font-black text-white font-mono">{stats.kills}</div>
+            <div className="text-lg sm:text-xl font-black text-white mt-0.5">
+              {stats.kills}
+            </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-[#071610] border border-[#143B2C] space-y-1">
-            <div className="flex items-center gap-1 text-[10px] uppercase font-bold text-[#6DAA8E]">
-              <Clock className="w-3 h-3 text-[#2BE29E]" />
-              <span>Survived</span>
+          {/* Coins Won */}
+          <div className="p-2.5 rounded-2xl bg-[#092218] border border-[#165039] flex flex-col items-center justify-center">
+            <div className="flex items-center gap-1 text-[10px] font-bold text-yellow-300 uppercase">
+              <Coins className="w-3 h-3 text-yellow-400" />
+              <span>Coins</span>
             </div>
-            <div className="text-lg font-black text-white font-mono">{formatTime(stats.survivalTimeSeconds)}</div>
+            <div className="text-lg sm:text-xl font-black text-yellow-300 mt-0.5">
+              +{stats.earnedCoins}
+            </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-[#071610] border border-[#143B2C] space-y-1">
-            <div className="flex items-center gap-1 text-[10px] uppercase font-bold text-[#6DAA8E]">
-              <Sparkles className="w-3 h-3 text-cyan-400" />
-              <span>Damage</span>
+          {/* XP Won */}
+          <div className="p-2.5 rounded-2xl bg-[#092218] border border-[#165039] flex flex-col items-center justify-center">
+            <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-300 uppercase">
+              <Zap className="w-3 h-3 text-[#2BE29E]" />
+              <span>XP</span>
             </div>
-            <div className="text-lg font-black text-white font-mono">{stats.damageDealt}</div>
-          </div>
-        </div>
-
-        {/* Real World × AI × Gaming Telemetry */}
-        <div className="p-3 rounded-xl bg-[#071610] border border-[#143B2C] text-left space-y-2">
-          <div className="flex items-center justify-between text-[11px] font-bold">
-            <span className="text-[#2BE29E] flex items-center gap-1">
-              <span>🌐</span> COMBAT TELEMETRY
-            </span>
-            <span className="text-[#6DAA8E] font-mono text-[10px]">
-              {stats.environmentUsed || 'Standard Arena'}
-            </span>
+            <div className="text-lg sm:text-xl font-black text-[#2BE29E] mt-0.5">
+              +{stats.earnedXp}
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 text-center text-[10px]">
-            <div className="p-2 rounded-lg bg-[#0E281E] border border-[#184635]">
-              <div className="text-amber-400 font-black text-sm font-mono">{stats.materialAdvantageHits || 0}</div>
-              <div className="text-[#6DAA8E] text-[9px] uppercase">Material Hits</div>
+          {/* Trophies */}
+          <div className="p-2.5 rounded-2xl bg-[#092218] border border-[#165039] flex flex-col items-center justify-center">
+            <div className="flex items-center gap-1 text-[10px] font-bold text-amber-400 uppercase">
+              <Trophy className="w-3 h-3 text-amber-400" />
+              <span>Trophies</span>
             </div>
-            <div className="p-2 rounded-lg bg-[#0E281E] border border-[#184635]">
-              <div className="text-[#2BE29E] font-black text-sm font-mono">{stats.kineticSurgesTriggered || 0}</div>
-              <div className="text-[#6DAA8E] text-[9px] uppercase">Kinetic Surges</div>
-            </div>
-            <div className="p-2 rounded-lg bg-[#0E281E] border border-[#184635]">
-              <div className="text-cyan-400 font-black text-sm font-mono">{stats.voiceCommandsIssued || 0}</div>
-              <div className="text-[#6DAA8E] text-[9px] uppercase">Voice Orders</div>
+            <div className="text-lg sm:text-xl font-black text-amber-400 mt-0.5">
+              +{trophiesWon}
             </div>
           </div>
         </div>
 
-        {/* Rewards Earned */}
-        <div className="flex items-center justify-around p-3 rounded-xl bg-[#071610] border border-[#184635]">
-          <div className="text-center">
-            <div className="text-[10px] text-[#6DAA8E] uppercase font-bold">XP Gained</div>
-            <div className="text-base font-black text-[#2BE29E] font-mono">+{stats.earnedXp} XP</div>
+        {/* Small extra stats row (Duration & Damage) */}
+        <div className="flex items-center justify-center gap-4 py-1.5 px-3 rounded-xl bg-[#071912]/80 border border-[#144433] text-[11px] text-[#78B49B] font-semibold">
+          <div className="flex items-center gap-1">
+            <Clock className="w-3 h-3 text-[#2BE29E]" />
+            <span>Time: <strong className="text-white">{formatTime(stats.survivalTimeSeconds)}</strong></span>
           </div>
-          <div className="h-6 w-px bg-[#184635]" />
-          <div className="text-center">
-            <div className="text-[10px] text-[#6DAA8E] uppercase font-bold">Arena Rating</div>
-            <div className="text-base font-black text-amber-400 font-mono">+{Math.max(10, Math.round(stats.score / 25))} 🏆</div>
+          <div className="h-3 w-px bg-[#165039]" />
+          <div className="flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-cyan-400" />
+            <span>Dmg: <strong className="text-white">{stats.damageDealt}</strong></span>
           </div>
         </div>
 
-        {/* Forge Progression Callout */}
-        <div className="p-2.5 rounded-xl bg-[#0E281E] border border-[#1C4D3A] text-xs text-[#A1D2BC] flex items-center gap-2 text-left">
-          <span className="text-base">⚡</span>
-          <span>Earn <strong>Exploration Points (EP)</strong> on real-world walks to upgrade your robot at <strong>The Forge</strong>!</span>
+        {/* Kid-Friendly Forge Tip */}
+        <div className="mt-3 p-2 rounded-xl bg-[#0D2E21] border border-[#1F6B4C] text-[11px] text-emerald-200 flex items-center justify-center gap-1.5">
+          <span className="text-sm">⚡</span>
+          <span>Walk outdoors to earn <strong>Exploration Points</strong> for forge upgrades!</span>
         </div>
 
-        {/* Action Buttons */}
-        <div className="space-y-2 pt-1">
+        {/* Action Buttons (Large, simple, easy for kids) */}
+        <div className="space-y-2 mt-4">
           <button
-            onClick={onPlayAgain}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/40 active:scale-95 transition-all cursor-pointer"
+            onClick={() => {
+              sound.playClick();
+              onPlayAgain();
+            }}
+            className="w-full py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-[#2BE29E] via-[#20CE8C] to-[#12A86F] hover:from-[#35EEA9] hover:to-[#22CA8C] text-[#072418] font-black text-sm sm:text-base uppercase tracking-wider shadow-lg shadow-emerald-950/60 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
-            <Play className="w-4 h-4 fill-white" />
-            <span>PLAY AGAIN WITH THIS ROBOT</span>
+            <Play className="w-5 h-5 fill-[#072418] text-[#072418]" />
+            <span>PLAY AGAIN</span>
           </button>
 
-          <button
-            onClick={onSnapNewObject}
-            className="w-full py-3 rounded-xl bg-[#0E281E] hover:bg-[#143B2C] border border-[#1C4D3A] hover:border-[#2BE29E] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-[#2BE29E]" />
-            <span>SCAN ANOTHER OBJECT</span>
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                sound.playClick();
+                onSnapNewObject();
+              }}
+              className="py-2.5 px-2 rounded-xl bg-[#0E281E] hover:bg-[#143B2C] border border-[#1C4D3A] hover:border-[#2BE29E] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-[#2BE29E]" />
+              <span>Scan Object</span>
+            </button>
 
-          <button
-            onClick={onReturnToLobby}
-            className="w-full py-2.5 rounded-xl bg-transparent hover:bg-[#0E281E] text-[#6DAA8E] hover:text-white text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-          >
-            <Home className="w-3.5 h-3.5" />
-            <span>Back to Main Menu</span>
-          </button>
+            <button
+              onClick={() => {
+                sound.playClick();
+                onReturnToLobby();
+              }}
+              className="py-2.5 px-2 rounded-xl bg-[#071610] hover:bg-[#0E281E] border border-[#163D2E] text-[#8AC1A9] hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95"
+            >
+              <Home className="w-3.5 h-3.5 text-[#6DAA8E]" />
+              <span>Main Menu</span>
+            </button>
+          </div>
         </div>
 
       </div>

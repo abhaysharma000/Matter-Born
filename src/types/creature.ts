@@ -3,6 +3,19 @@ import { ExplorationScanMetadata } from './exploration';
 export type CreatureElement = 'fire' | 'electric' | 'nature' | 'ice' | 'cyber' | 'void' | 'rock';
 export type CreatureRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic';
 export type BodyShape = 'behemoth' | 'serpent' | 'arachnid' | 'humanoid' | 'golem' | 'avian' | 'hydra' | 'mech';
+export type WeaponSkillType =
+  | 'swords'
+  | 'flamethrower'
+  | 'double_guns'
+  | 'mage_spell'
+  | 'fighter'
+  | 'archer_bow'
+  | 'magic_fist'
+  | 'electric_stun_gun'
+  | 'launcher'
+  | 'disk_thrower'
+  | 'laser_gun';
+
 export type AbilityVfxType =
   | 'nova'
   | 'beam'
@@ -22,7 +35,22 @@ export type AbilityVfxType =
   | 'decoy_burst'
   | 'interceptor_ram'
   | 'cyclops_ray'
-  | 'siege_cannon';
+  | 'siege_cannon'
+  | 'swords'
+  | 'flamethrower'
+  | 'double_guns'
+  | 'mage_spell'
+  | 'fighter'
+  | 'archer_bow'
+  | 'magic_fist'
+  | 'electric_stun_gun'
+  | 'launcher'
+  | 'disk_thrower'
+  | 'laser_gun'
+  | 'bulletstorm'
+  | 'astral_singularity'
+  | 'arrow_volley'
+  | 'chakram_swarm';
 
 export type ObjectArchetype =
   | 'cup_mug'
@@ -331,7 +359,9 @@ export interface BattleCreature {
   originalObject: string;
   objectFeature: string;
   faction?: 'Autobot' | 'Decepticon';
-  robotClass?: 'Leader' | 'Scout' | 'Seeker' | 'Dreadnought' | 'Infiltrator' | 'Warrior';
+  robotClass?: 'Leader' | 'Scout' | 'Seeker' | 'Dreadnought' | 'Infiltrator' | 'Warrior' | 'Mage' | 'Fighter' | 'Archer' | 'Magic Fist';
+  primaryWeapon?: WeaponSkillType;
+  weaponType?: WeaponSkillType;
   element: CreatureElement;
   rarity: CreatureRarity;
   lore: string;
@@ -381,6 +411,7 @@ export interface ActiveFighter {
   isAttacking: boolean;
   isCastingAbility: boolean;
   isHit: boolean;
+  hitTimer?: number;
   isDead: boolean;
   targetId?: string | null;
   // Robot Ability Status Effects & Buffs
@@ -390,6 +421,7 @@ export interface ActiveFighter {
   silenceDuration?: number;
   isStunned?: boolean;
   stunDuration?: number;
+  burnDuration?: number;
   isBerserk?: boolean;
   berserkDuration?: number;
   isStealthed?: boolean;
@@ -422,6 +454,15 @@ export interface AttackProjectile {
   isSingularity?: boolean;
   isMortar?: boolean;
   isCyclone?: boolean;
+  weaponType?: WeaponSkillType;
+  pierceCount?: number;
+  ricochetCount?: number;
+  aoeRadius?: number;
+  burnDuration?: number;
+  stunDuration?: number;
+  knockbackForce?: number;
+  spinSpeed?: number;
+  hasDodgedPlayer?: boolean;
 }
 
 export interface DamageFloater {
@@ -455,6 +496,8 @@ export interface Arena3DMatchStats {
   isVictory: boolean;
   earnedXp: number;
   earnedCoins: number;
+  score?: number;
+  trophies?: number;
   environmentUsed?: string;
   materialAdvantageHits?: number;
   voiceCommandsIssued?: number;
