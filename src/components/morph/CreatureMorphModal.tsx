@@ -37,7 +37,7 @@ import * as THREE from 'three';
 import { BattleCreature, CreatureElement } from '../../types/creature';
 import { OBJECT_PRESETS, ObjectPresetSample } from '../../data/creaturePresets';
 import { Creature3DBuilder } from '../../game3d/Creature3DBuilder';
-import { analyzeImageFileOrBase64 } from '../../utils/imageAnalysis';
+import { analyzeImageFileOrBase64, deriveCreatureStatsFromComplexityAndDistance } from '../../utils/imageAnalysis';
 import { deriveCombatDna } from '../../utils/combatDnaDerivation';
 import { CombatDnaBlueprintView } from './CombatDnaBlueprintView';
 import { sound } from '../../utils/audio';
@@ -184,9 +184,12 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
   const analyzeCapturedImage = async (imageBase64: string, hintOverride?: string) => {
     setIsAnalyzing(true);
     setAnalysisStatus('Scanning image foreground, material textures & palette...');
+    let clientAnalyzed: any = null;
     try {
-      const clientAnalyzed = await analyzeImageFileOrBase64(imageBase64);
+      clientAnalyzed = await analyzeImageFileOrBase64(imageBase64);
       setAnalysisStatus('Synthesizing Object DNA & Physical Traits...');
+
+      const distanceMeters = explorationContext?.distanceMeters || 0;
 
       const res = await fetch('/api/creature/generate', {
         method: 'POST',
@@ -195,6 +198,7 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
           imageBase64,
           promptHint: hintOverride !== undefined ? hintOverride : promptHint,
           clientAnalyzed,
+          distanceFromStartMeters: distanceMeters,
         }),
       });
 
@@ -217,13 +221,53 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
       }
     } catch (err) {
       console.warn('Analysis fallback:', err);
+      const distanceMeters = explorationContext?.distanceMeters || 0;
       const template = OBJECT_PRESETS[0].defaultCreature;
+      const objName = hintOverride || promptHint || 'Ambient Real-World Artifact';
+      const derivedStats = deriveCreatureStatsFromComplexityAndDistance(
+        clientAnalyzed?.complexity || {
+          scaleTier: 'compact',
+          tierLabel: 'C-TIER COMBAT WARRIOR',
+          complexityScore: 55,
+          statMultiplier: 1.0,
+          powerRating: 850,
+          physicalMassDesc: 'Standard Handheld Object',
+          recommendedHp: 520,
+          recommendedAttack: 86,
+          recommendedDefense: 62,
+          recommendedSpeed: 13,
+          visualScale: 1.0,
+        },
+        distanceMeters,
+        objName,
+        clientAnalyzed?.primaryHex || '#00E5FF'
+      );
       const fallbackCreature: BattleCreature = {
         ...template,
         id: `creature-${Date.now()}`,
         capturedImageUrl: imageBase64,
-        originalObject: hintOverride || promptHint || 'Ambient Real-World Artifact',
+        originalObject: objName,
         name: hintOverride ? `Titan ${hintOverride}` : 'Iron-Aegis Sentinel',
+        stats: {
+          hp: derivedStats.hp,
+          attack: derivedStats.attack,
+          defense: derivedStats.defense,
+          speed: derivedStats.speed,
+        },
+        specialAbility: {
+          ...template.specialAbility,
+          damage: derivedStats.abilityDamage,
+          cooldown: derivedStats.abilityCooldown,
+        },
+        objectComplexity: clientAnalyzed?.complexity || {
+          complexityScore: 55,
+          scaleTier: 'compact',
+          tierLabel: 'C-TIER COMBAT WARRIOR',
+          statMultiplier: 1.0,
+          powerRating: derivedStats.powerRating,
+          physicalMassDesc: 'Standard Handheld Object',
+        },
+        explorationDistanceMeters: distanceMeters,
         createdAt: Date.now(),
       };
       setStagedCreature(fallbackCreature);
@@ -810,6 +854,65 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                       {stagedCreature.objectDna?.gameplayIdentity?.suggestedClass || stagedCreature.robotClass || 'Warrior'}
                     </div>
                   </div>
+                </div>
+
+                {/* Dynamic State Calibration: Object Complexity & Distance Matrix */}
+                <div className="p-3.5 rounded-xl bg-[#091B14] border border-emerald-500/40 space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-[#143B2C]">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-emerald-600 text-white shadow-xs">
+                        <Activity className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                          <span>Dynamic State Calibration</span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
+                            Unique Object DNA
+                          </span>
+                        </div>
+                        <div className="text-xs font-black text-white flex items-center gap-2">
+                          <span>
+                            {stagedCreature.objectComplexity?.tierLabel || stagedCreature.objectDna?.gameplayIdentity?.combatTier || 'COMBAT UNIT'}
+                          </span>
+                          <span className="text-[11px] font-mono text-[#2BE29E]">
+                            Complexity: {stagedCreature.objectComplexity?.complexityScore || 60}/100
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-[10px] uppercase font-bold text-[#6DAA8E]">Distance Power Tier</div>
+                      <div className="text-xs font-black text-amber-400 font-mono flex items-center gap-1 justify-end">
+                        <Compass className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{explorationContext?.distanceMeters || stagedCreature.distanceExplored || 0}m Range</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Live Stats Preview */}
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="p-2 rounded-lg bg-[#071610] border border-[#184635]">
+                      <div className="text-[10px] font-bold text-rose-400">HP</div>
+                      <div className="text-sm font-black text-white font-mono">{stagedCreature.stats?.hp || 520}</div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-[#071610] border border-[#184635]">
+                      <div className="text-[10px] font-bold text-amber-400">ATK</div>
+                      <div className="text-sm font-black text-white font-mono">{stagedCreature.stats?.attack || 88}</div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-[#071610] border border-[#184635]">
+                      <div className="text-[10px] font-bold text-emerald-400">DEF</div>
+                      <div className="text-sm font-black text-white font-mono">{stagedCreature.stats?.defense || 64}</div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-[#071610] border border-[#184635]">
+                      <div className="text-[10px] font-bold text-cyan-400">SPD</div>
+                      <div className="text-sm font-black text-white font-mono">{stagedCreature.stats?.speed || 13}</div>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-[#A1D2BC] italic text-center">
+                    Stats dynamically scale according to object complexity in the image and distance from your starting position.
+                  </p>
                 </div>
 
                 {/* Final Trigger Transformation CTA */}

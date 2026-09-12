@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/platform/Navbar';
 import { GameCatalog } from './components/platform/GameCatalog';
-import { ServerBrowser } from './components/platform/ServerBrowser';
 import { ArmoryShop } from './components/platform/ArmoryShop';
 import { ForgeScreen } from './components/platform/ForgeScreen';
 import { Tournaments } from './components/platform/Tournaments';
@@ -27,7 +26,7 @@ const USER_STORAGE_KEY = 'paperio_platform_user_v2';
 const QUESTS_STORAGE_KEY = 'paperio_platform_quests_v2';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'games' | 'servers' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition'>('games');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isQuestsOpen, setIsQuestsOpen] = useState(false);
   const [isCybertronPassOpen, setIsCybertronPassOpen] = useState(false);
@@ -263,7 +262,7 @@ export default function App() {
         {activeTab === 'games' && (
           <GameCatalog
             onLaunchGame={handleLaunchGame}
-            onOpenServers={() => setActiveTab('servers')}
+            onLaunchFriendRoom={handleLaunchCustomRoom}
             onOpenExpedition={() => setActiveTab('expedition')}
             onOpenForge={() => setActiveTab('forge')}
             activeCreature={selectedCreature}
@@ -279,13 +278,6 @@ export default function App() {
             onOpenScanPipeline={handleOpenExplorationScan}
             onBackToLobby={() => setActiveTab('games')}
             onNavigateToForge={() => setActiveTab('forge')}
-          />
-        )}
-
-        {activeTab === 'servers' && (
-          <ServerBrowser
-            onJoinRoom={handleJoinRoom}
-            onLaunchCustomRoom={handleLaunchCustomRoom}
           />
         )}
 

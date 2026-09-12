@@ -4,7 +4,6 @@ import {
   Volume2, 
   VolumeX, 
   Bot,
-  Globe,
   Trophy,
   Crown,
   Compass,
@@ -15,8 +14,8 @@ import { PlatformUser } from '../../types/platform';
 import { getExplorationPoints } from '../../utils/forgeManager';
 
 interface NavbarProps {
-  activeTab: 'games' | 'servers' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition';
-  onSelectTab: (tab: 'games' | 'servers' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition') => void;
+  activeTab: 'games' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition';
+  onSelectTab: (tab: 'games' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition') => void;
   user: PlatformUser;
   onOpenProfile: () => void;
   onOpenQuests: () => void;
@@ -107,18 +106,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Anvil className="w-3.5 h-3.5 text-amber-400" />
               <span>Forge</span>
-            </button>
-
-            <button
-              onClick={() => onSelectTab('servers')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'servers'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-black'
-                  : 'text-[#8BA996] hover:text-white hover:bg-[#123024]'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5 text-teal-400" />
-              <span>Servers</span>
             </button>
 
             {/* Cybertronian Season Pass Shortcut */}

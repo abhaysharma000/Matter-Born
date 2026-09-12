@@ -261,17 +261,7 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
         <div 
           ref={mountRef} 
           className="w-full h-full cursor-grab active:cursor-grabbing flex items-center justify-center"
-          title="Drag to rotate 360° • Tap to attack"
         />
-
-        {/* 360 Rotation & Attack Hint Badge */}
-        <div className="absolute bottom-2 left-2 z-10 pointer-events-none">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#071912]/80 border border-[#184635] text-[10px] font-bold text-[#8BA996] backdrop-blur-md shadow-xs">
-            <span>🔄 Drag to Rotate 360°</span>
-            <span className="text-[#32634D]">•</span>
-            <span>Tap to Strike</span>
-          </div>
-        </div>
 
         {/* Walk / Standby Stance Toggle */}
         <div className="absolute bottom-2 right-2 z-10">

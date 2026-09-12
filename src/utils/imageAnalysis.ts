@@ -292,6 +292,8 @@ export async function analyzeImageFileOrBase64(
 
         for (let i = 0; i < data.length; i += 4) {
           const pixelIdx = i / 4;
+          const pxX = pixelIdx % sampleSize;
+          const pxY = Math.floor(pixelIdx / sampleSize);
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
@@ -300,13 +302,19 @@ export async function analyzeImageFileOrBase64(
           // Store grayscale value (0.0 to 1.0)
           grayMap[pixelIdx] = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
 
-          // Skip nearly transparent or pure white/black background corners
+          // Skip nearly transparent pixels
           if (a < 80) continue;
 
-          totalR += r;
-          totalG += g;
-          totalB += b;
-          totalPixels++;
+          // Foreground center-weighting: objects are framed in the central 60% of the image
+          const normX = (pxX - sampleSize / 2) / (sampleSize / 2);
+          const normY = (pxY - sampleSize / 2) / (sampleSize / 2);
+          const distFromCenter = Math.hypot(normX, normY);
+          const weight = Math.max(0.25, 1.25 - distFromCenter * 0.95);
+
+          totalR += r * weight;
+          totalG += g * weight;
+          totalB += b * weight;
+          totalPixels += weight;
 
           // Quantize to reduce bins
           const qr = Math.round(r / 24) * 24;
@@ -317,7 +325,7 @@ export async function analyzeImageFileOrBase64(
           if (!colorCounts[key]) {
             colorCounts[key] = { r: qr, g: qg, b: qb, count: 0 };
           }
-          colorCounts[key].count++;
+          colorCounts[key].count += weight;
         }
 
         if (totalPixels === 0) return resolve(fallback);
@@ -328,6 +336,11 @@ export async function analyzeImageFileOrBase64(
         for (let y = 1; y < sampleSize - 1; y++) {
           for (let x = 1; x < sampleSize - 1; x++) {
             const idx = y * sampleSize + x;
+            // Center weight edge focus so background borders don't distort object edge score
+            const normX = (x - sampleSize / 2) / (sampleSize / 2);
+            const normY = (y - sampleSize / 2) / (sampleSize / 2);
+            const edgeWeight = Math.max(0.3, 1.15 - Math.hypot(normX, normY) * 0.85);
+
             // Horizontal gradient
             const gx =
               -grayMap[idx - sampleSize - 1] + grayMap[idx - sampleSize + 1] +
@@ -340,13 +353,13 @@ export async function analyzeImageFileOrBase64(
               grayMap[idx + sampleSize - 1] + 2 * grayMap[idx + sampleSize] + grayMap[idx + sampleSize + 1];
 
             const magnitude = Math.sqrt(gx * gx + gy * gy);
-            if (magnitude > 0.18) {
-              edgeSum += magnitude;
+            if (magnitude > 0.16) {
+              edgeSum += magnitude * edgeWeight;
             }
-            edgeCount++;
+            edgeCount += edgeWeight;
           }
         }
-        const edgeDensity = Math.min(1.0, (edgeSum / (edgeCount || 1)) * 3.2);
+        const edgeDensity = Math.min(1.0, (edgeSum / (edgeCount || 1)) * 3.4);
 
         // Color entropy: number of distinct color clusters
         const distinctColorCount = Object.keys(colorCounts).length;
@@ -416,4 +429,152 @@ export async function analyzeImageFileOrBase64(
 
     img.src = src;
   });
+}
+
+export interface DerivedCreatureStats {
+  hp: number;
+  attack: number;
+  defense: number;
+  speed: number;
+  abilityDamage: number;
+  abilityCooldown: number;
+  powerRating: number;
+  scale: number;
+  baseStats: {
+    hp: number;
+    attack: number;
+    defense: number;
+    speed: number;
+    abilityDamage: number;
+  };
+  distanceBuffs: {
+    hp: number;
+    attack: number;
+    defense: number;
+    speed: number;
+    abilityDamage: number;
+  };
+  distanceFromStartMeters: number;
+  distanceMultiplier: number;
+  distanceTierLabel: string;
+  distanceTierBadge: string;
+  distanceBonusPercent: number;
+  complexityScore: number;
+  scaleTier: ObjectScaleTier;
+}
+
+export function deriveCreatureStatsFromComplexityAndDistance(
+  complexity: ObjectComplexityAnalysis,
+  distanceFromStartMeters: number = 0,
+  objectName: string = '',
+  colorHex: string = '#00E5FF'
+): DerivedCreatureStats {
+  // Deterministic hash jitter from object name + color so two different items never have identical stats!
+  const seedString = `${(objectName || 'mech').toLowerCase()}-${(colorHex || '#00E5FF').toLowerCase()}-${complexity.scaleTier}-${complexity.complexityScore}`;
+  let hash = 0;
+  for (let i = 0; i < seedString.length; i++) {
+    hash = (hash << 5) - hash + seedString.charCodeAt(i);
+    hash |= 0;
+  }
+  const jitter1 = (((Math.abs(hash) % 19) - 9) / 100); // -0.09 to +0.09
+  const jitter2 = ((((Math.abs(hash >> 3)) % 17) - 8) / 100);
+  const jitter3 = ((((Math.abs(hash >> 6)) % 15) - 7) / 100);
+  const jitter4 = ((((Math.abs(hash >> 9)) % 11) - 5) / 100);
+
+  // 1. Base stats from complexity
+  const baseHp = Math.round(complexity.recommendedHp * (1 + jitter1 * 0.4));
+  const baseAttack = Math.round(complexity.recommendedAttack * (1 + jitter2 * 0.6));
+  const baseDefense = Math.round(complexity.recommendedDefense * (1 + jitter3 * 0.6));
+  const baseSpeed = Math.max(7, Math.round(complexity.recommendedSpeed + jitter4 * 1.5));
+  const baseAbilityDmg = Math.round((baseAttack * 1.6 + complexity.complexityScore * 0.7) * (1 + jitter1 * 0.5));
+  const baseCooldown = Math.max(3.5, Number((7.0 - (baseSpeed - 10) * 0.25).toFixed(1)));
+
+  // 2. Distance from starting position calculation
+  const dist = Math.max(0, distanceFromStartMeters);
+  let distanceMultiplier = 1.0;
+  let distanceBonusPercent = 0;
+  let distanceTierLabel = 'LOCAL ORIGIN';
+  let distanceTierBadge = '⚪';
+
+  if (dist >= 100) {
+    distanceTierLabel = 'GRAND HACKATHON MATRIX';
+    distanceTierBadge = '🔴';
+    // +65% base at 100m, +0.2% per additional meter up to max 85%
+    distanceBonusPercent = Math.min(85, Math.round(65 + (dist - 100) * 0.2));
+    distanceMultiplier = 1 + distanceBonusPercent / 100;
+  } else if (dist >= 75) {
+    distanceTierLabel = 'ATRIUM MATRIX';
+    distanceTierBadge = '🟡';
+    distanceBonusPercent = 50;
+    distanceMultiplier = 1.50;
+  } else if (dist >= 50) {
+    distanceTierLabel = 'MAIN HALL APEX';
+    distanceTierBadge = '🟣';
+    distanceBonusPercent = 40;
+    distanceMultiplier = 1.40;
+  } else if (dist >= 35) {
+    distanceTierLabel = 'DEV LAB VANGUARD';
+    distanceTierBadge = '🔵';
+    distanceBonusPercent = 30;
+    distanceMultiplier = 1.30;
+  } else if (dist >= 20) {
+    distanceTierLabel = 'CORRIDOR RANGER';
+    distanceTierBadge = '🌲';
+    distanceBonusPercent = 20;
+    distanceMultiplier = 1.20;
+  } else if (dist >= 10) {
+    distanceTierLabel = 'HACKATHON SCOUT';
+    distanceTierBadge = '🟢';
+    distanceBonusPercent = 10;
+    distanceMultiplier = 1.10;
+  }
+
+  const bonusFraction = distanceBonusPercent / 100;
+  const hpBonus = Math.round(baseHp * bonusFraction * 0.75);
+  const attackBonus = Math.round(baseAttack * bonusFraction * 0.85);
+  const defenseBonus = Math.round(baseDefense * bonusFraction * 0.70);
+  const speedBonus = Math.round(bonusFraction * 3.0);
+  const abilityDmgBonus = Math.round(baseAbilityDmg * bonusFraction * 0.80);
+
+  const finalHp = baseHp + hpBonus;
+  const finalAttack = baseAttack + attackBonus;
+  const finalDefense = baseDefense + defenseBonus;
+  const finalSpeed = baseSpeed + speedBonus;
+  const finalAbilityDmg = baseAbilityDmg + abilityDmgBonus;
+
+  const powerRating = Math.round(
+    finalHp * 0.7 + finalAttack * 4.0 + finalDefense * 3.2 + finalSpeed * 12 + finalAbilityDmg * 2.0
+  );
+
+  return {
+    hp: finalHp,
+    attack: finalAttack,
+    defense: finalDefense,
+    speed: finalSpeed,
+    abilityDamage: finalAbilityDmg,
+    abilityCooldown: baseCooldown,
+    powerRating,
+    scale: complexity.visualScale,
+    baseStats: {
+      hp: baseHp,
+      attack: baseAttack,
+      defense: baseDefense,
+      speed: baseSpeed,
+      abilityDamage: baseAbilityDmg,
+    },
+    distanceBuffs: {
+      hp: hpBonus,
+      attack: attackBonus,
+      defense: defenseBonus,
+      speed: speedBonus,
+      abilityDamage: abilityDmgBonus,
+    },
+    distanceFromStartMeters: dist,
+    distanceMultiplier,
+    distanceTierLabel,
+    distanceTierBadge,
+    distanceBonusPercent,
+    complexityScore: complexity.complexityScore,
+    scaleTier: complexity.scaleTier,
+  };
 }

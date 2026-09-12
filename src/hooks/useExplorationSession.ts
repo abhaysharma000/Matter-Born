@@ -208,8 +208,8 @@ export function useExplorationSession() {
 
   // Generate discovery zones radially around the expedition origin
   const generateDiscoveryZones = useCallback((origin: ExplorationOrigin): DiscoveryZone[] => {
-    // Generate zones at distinct bearings (e.g. North-East 45°, East 90°, South-East 135°, South 180°, etc.)
-    const bearings = [45, 120, 210, 315, 270];
+    // Generate zones at distinct bearings (30°, 90°, 150°, 210°, 270°, 330°) to distribute across building halls
+    const bearings = [30, 90, 150, 210, 270, 330];
     return EXPLORATION_MILESTONES.map((milestone, idx) => {
       const bearing = bearings[idx % bearings.length];
       const point = calculateDestinationPoint(
@@ -282,11 +282,11 @@ export function useExplorationSession() {
           reading.longitude
         );
 
-        // Filter out microscopic standing jitter (< 3 meters)
-        const distance = rawDistance < 3 ? 0 : rawDistance;
+        // Filter out microscopic standing jitter (< 0.8 meters)
+        const distance = rawDistance < 0.8 ? 0 : rawDistance;
         const maxDist = Math.max(prev.maxDistanceReached, distance);
 
-        // Update breadcrumb trail (sample every 10m or 5s)
+        // Update breadcrumb trail (sample every 2.5m for detailed indoor building paths)
         const breadcrumbs = [...prev.breadcrumbs];
         const lastCrumb = breadcrumbs[breadcrumbs.length - 1];
         if (
@@ -296,7 +296,7 @@ export function useExplorationSession() {
             lastCrumb.lng,
             reading.latitude,
             reading.longitude
-          ) >= 8
+          ) >= 2.5
         ) {
           breadcrumbs.push({
             lat: reading.latitude,
@@ -449,8 +449,8 @@ export function useExplorationSession() {
       },
       {
         enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 2500,
+        timeout: 10000,
+        maximumAge: 0,
       }
     );
   }, [processLocationReading]);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Zap,
   Trophy,
@@ -14,6 +14,9 @@ import {
   CheckCircle2,
   ExternalLink,
   Radio,
+  Compass,
+  Play,
+  Navigation,
 } from 'lucide-react';
 import { useExplorationSession } from '../../hooks/useExplorationSession';
 import { ExplorationMap } from './ExplorationMap';
@@ -21,6 +24,7 @@ import { MIN_STATIONARY_DURATION } from '../../constants/explorationConfig';
 import { formatExplorationDistance } from '../../utils/geoUtils';
 import { ExplorationDiscoveryContext } from '../../types/exploration';
 import { ExplorationUpgradesModal } from './ExplorationUpgradesModal';
+import { sound } from '../../utils/audio';
 
 interface ExplorationScreenProps {
   onOpenScanPipeline: (context: ExplorationDiscoveryContext) => void;
@@ -52,6 +56,8 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
 
   const [showDemoTools, setShowDemoTools] = useState(false);
   const [showUpgradesModal, setShowUpgradesModal] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [startSuccessMsg, setStartSuccessMsg] = useState<string | null>(null);
 
   const {
     state,
@@ -70,19 +76,47 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
     sessionPointsEarned = 0,
   } = session;
 
-  // Auto-initialize expedition if not yet started so users don't have to fill out any form
-  useEffect(() => {
-    if (!origin && !permissionError && state === 'IDLE') {
-      startExpedition('Real-World Walk');
-    }
-  }, [origin, permissionError, state, startExpedition]);
+  const handleStartExploration = (forceSim: boolean = false) => {
+    sound.playClick();
+    setIsStarting(true);
 
-  const handleStart = (isSim: boolean = false) => {
-    if (isSim) {
+    if (forceSim || isInIframe) {
       startDevSimulatedExpedition('Satellite Rover');
-    } else {
-      startExpedition('Real-World Walk');
+      sound.playBonus();
+      setStartSuccessMsg('🛰️ Satellite Rover Exploration Active!');
+      setTimeout(() => setStartSuccessMsg(null), 3500);
+      setIsStarting(false);
+      return;
     }
+
+    if (!navigator.geolocation) {
+      startDevSimulatedExpedition('Satellite Rover');
+      sound.playBonus();
+      setStartSuccessMsg('🛰️ Exploration Started (Virtual Rover Active)');
+      setTimeout(() => setStartSuccessMsg(null), 3500);
+      setIsStarting(false);
+      return;
+    }
+
+    // Attempt real-world GPS
+    navigator.geolocation.getCurrentPosition(
+      () => {
+        startExpedition('Real-World Walk');
+        sound.playBonus();
+        setStartSuccessMsg('🧭 Live GPS Exploration Started!');
+        setTimeout(() => setStartSuccessMsg(null), 3500);
+        setIsStarting(false);
+      },
+      (err) => {
+        console.warn('Geolocation unavailable, fallback to rover mode:', err);
+        startDevSimulatedExpedition('Satellite Rover');
+        sound.playBonus();
+        setStartSuccessMsg('🛰️ Exploration Started! Satellite Rover Active');
+        setTimeout(() => setStartSuccessMsg(null), 3500);
+        setIsStarting(false);
+      },
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+    );
   };
 
   const handleScanClick = () => {
@@ -115,6 +149,34 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Main Working Explore Button in Header */}
+          {!origin || state === 'IDLE' ? (
+            <button
+              onClick={() => handleStartExploration(false)}
+              disabled={isStarting}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 active:scale-95 text-emerald-950 font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-500/25 transition-all cursor-pointer"
+              title="Start Exploration"
+            >
+              <Compass className="w-4 h-4 text-emerald-950" />
+              <span>{isStarting ? 'STARTING...' : 'START EXPLORATION'}</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-black flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>EXPLORING ACTIVE ({formatExplorationDistance(distanceExplored)})</span>
+              </div>
+              <button
+                onClick={startNewExpedition}
+                className="px-2.5 py-1.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Reset or stop current walk"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Walk</span>
+              </button>
+            </div>
+          )}
+
           {onNavigateToForge && (
             <button
               onClick={onNavigateToForge}
@@ -123,17 +185,6 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
             >
               <Anvil className="w-4 h-4 text-amber-950" />
               <span>The Forge ({explorationPoints} EP)</span>
-            </button>
-          )}
-
-          {origin && (
-            <button
-              onClick={startNewExpedition}
-              className="px-2.5 py-1.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-              title="Reset current walk"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Walk</span>
             </button>
           )}
 
@@ -150,6 +201,68 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Success Notification Toast */}
+      {startSuccessMsg && (
+        <div className="p-3.5 rounded-2xl bg-emerald-950/90 border-2 border-emerald-400 text-emerald-100 text-sm font-black flex items-center justify-between gap-3 shadow-lg shadow-emerald-950/50 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <span>{startSuccessMsg}</span>
+          </div>
+          <button
+            onClick={() => setStartSuccessMsg(null)}
+            className="p-1 rounded-lg text-emerald-300 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Prominent Explore Launchpad Banner (When not yet started or idle) */}
+      {(!origin || state === 'IDLE') && (
+        <div className="rounded-2xl bg-gradient-to-br from-[#0B241B] via-[#0D2C20] to-[#071912] border-2 border-emerald-500/50 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-5">
+            <div className="space-y-2 text-center md:text-left max-w-xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-black uppercase tracking-wider">
+                <Compass className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Live GPS & Radar Exploration</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">
+                Start Your Exploration Journey
+              </h2>
+              <p className="text-xs sm:text-sm text-[#A1D2BC] leading-relaxed">
+                Step into corridors, venues, or outdoor pathways. Your physical movement generates Energy Points (EP) for The Forge and unlocks dynamic 3D battle robot transmutations from real-world objects around you.
+              </p>
+              <div className="flex items-center gap-4 pt-1 text-xs text-emerald-300/80 justify-center md:justify-start flex-wrap">
+                <span className="flex items-center gap-1">📍 Real-World Waypoints</span>
+                <span className="flex items-center gap-1">⭐ Earn EP per meter</span>
+                <span className="flex items-center gap-1">🤖 Scan Artifacts at 10m+</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 w-full md:w-auto shrink-0">
+              <button
+                onClick={() => handleStartExploration(false)}
+                disabled={isStarting}
+                className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 active:scale-95 text-emerald-950 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-500/30 transition-all cursor-pointer"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>{isStarting ? 'STARTING...' : 'START EXPLORATION'}</span>
+              </button>
+
+              <button
+                onClick={() => handleStartExploration(true)}
+                disabled={isStarting}
+                className="px-5 py-2.5 rounded-xl bg-[#091D15] hover:bg-[#113326] text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+              >
+                <Radio className="w-3.5 h-3.5 text-amber-400" />
+                <span>Start Virtual Rover (Indoor / Preview)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. The 3 Essential Metrics: EP We Have, EP Collecting, Next Reward */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -289,14 +402,14 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
               <span>Open in Dedicated Tab for GPS</span>
             </button>
             <button
-              onClick={() => handleStart(true)}
+              onClick={() => handleStartExploration(true)}
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black uppercase tracking-wide flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
             >
               <Radio className="w-3.5 h-3.5" />
               <span>Play Virtual Satellite Rover</span>
             </button>
             <button
-              onClick={() => handleStart(false)}
+              onClick={() => handleStartExploration(false)}
               className="px-3.5 py-2 rounded-xl bg-[#2A1608] hover:bg-[#381F0C] text-amber-300 text-xs font-bold border border-amber-600/40 transition-all cursor-pointer"
             >
               Retry GPS
@@ -321,39 +434,39 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs font-bold">
             {!origin && (
               <button
-                onClick={() => handleStart(true)}
+                onClick={() => handleStartExploration(true)}
                 className="py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white col-span-2 sm:col-span-1 cursor-pointer"
               >
                 Set Start Point
               </button>
             )}
             <button
-              onClick={() => simulateWalkStep(50)}
+              onClick={() => simulateWalkStep(5)}
               className="py-2 px-2.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] flex items-center justify-center gap-1 cursor-pointer"
             >
               <Footprints className="w-3.5 h-3.5" />
-              <span>+50m</span>
+              <span>+5m</span>
             </button>
             <button
-              onClick={() => simulateWalkStep(150)}
+              onClick={() => simulateWalkStep(10)}
               className="py-2 px-2.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] flex items-center justify-center gap-1 cursor-pointer"
             >
               <Footprints className="w-3.5 h-3.5" />
-              <span>+150m</span>
+              <span>+10m</span>
             </button>
             <button
-              onClick={() => simulateWalkStep(250)}
+              onClick={() => simulateWalkStep(20)}
               className="py-2 px-2.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] flex items-center justify-center gap-1 cursor-pointer"
             >
               <Footprints className="w-3.5 h-3.5" />
-              <span>+250m</span>
+              <span>+20m</span>
             </button>
             <button
-              onClick={() => simulateWalkStep(500)}
+              onClick={() => simulateWalkStep(35)}
               className="py-2 px-2.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] flex items-center justify-center gap-1 cursor-pointer"
             >
               <Footprints className="w-3.5 h-3.5" />
-              <span>+500m</span>
+              <span>+35m</span>
             </button>
             <button
               onClick={simulateStopWalking}
@@ -394,7 +507,7 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
                   STOP WALKING TO SCAN
                 </div>
                 <div className="text-xs text-amber-300/90">
-                  Find a safe spot on the sidewalk and stand still for a few seconds.
+                  Find a safe spot in the corridor and stand still for a moment.
                 </div>
               </div>
             </div>
@@ -402,7 +515,7 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
               Standing still: {(stationaryDuration ?? 0).toFixed(0)}s / {MIN_STATIONARY_DURATION}s
             </div>
           </div>
-        ) : activeMilestone || distanceExplored >= 50 ? (
+        ) : activeMilestone || distanceExplored >= 10 ? (
           <div className="p-3.5 rounded-xl bg-[#0E2F23] border border-[#2BE29E]/40 text-white space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -428,11 +541,32 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-between text-xs text-emerald-300">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-300">
             <div className="flex items-center gap-2">
-              <Footprints className="w-4 h-4 text-[#2BE29E]" />
-              <span>Walk at least 50m outdoors to unlock your first object scan opportunity!</span>
+              <Footprints className="w-4 h-4 text-[#2BE29E] shrink-0" />
+              <span>
+                {!origin
+                  ? 'Start exploration to begin tracking movement and unlock object scans!'
+                  : 'Walk at least 10m from start to unlock your first object scan opportunity!'}
+              </span>
             </div>
+            {!origin ? (
+              <button
+                onClick={() => handleStartExploration(false)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-emerald-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer shrink-0"
+              >
+                <Compass className="w-4 h-4" />
+                <span>START EXPLORATION</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => simulateWalkStep(10)}
+                className="px-3 py-1.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-300 border border-[#1E5F46] text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Footprints className="w-3.5 h-3.5" />
+                <span>Step Forward (+10m)</span>
+              </button>
+            )}
           </div>
         )}
 

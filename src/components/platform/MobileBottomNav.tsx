@@ -3,14 +3,13 @@ import {
   Swords, 
   Compass, 
   Anvil, 
-  Crown, 
-  Globe
+  Crown 
 } from 'lucide-react';
 import { sound } from '../../utils/audio';
 
 interface MobileBottomNavProps {
-  activeTab: 'games' | 'servers' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition';
-  onSelectTab: (tab: 'games' | 'servers' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition') => void;
+  activeTab: 'games' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition';
+  onSelectTab: (tab: 'games' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition') => void;
   onOpenPass: () => void;
 }
 
@@ -19,7 +18,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onSelectTab,
   onOpenPass,
 }) => {
-  const handleNav = (tab: 'games' | 'servers' | 'forge' | 'expedition') => {
+  const handleNav = (tab: 'games' | 'forge' | 'expedition') => {
     sound.playClick();
     onSelectTab(tab);
   };
@@ -108,27 +107,6 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           </div>
           <span className="text-[10px] font-black tracking-tight mt-0.5 text-amber-300">
             Pass S1
-          </span>
-        </button>
-
-        {/* 5. Online / Servers Tab */}
-        <button
-          onClick={() => handleNav('servers')}
-          className={`flex flex-col items-center justify-center min-w-[56px] py-1 px-2 rounded-xl transition-transform active:scale-90 cursor-pointer ${
-            activeTab === 'servers' ? 'text-emerald-400' : 'text-[#8BA996] hover:text-white'
-          }`}
-        >
-          <div
-            className={`w-9 h-8 rounded-xl flex items-center justify-center transition-all ${
-              activeTab === 'servers'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                : 'bg-transparent text-[#8BA996]'
-            }`}
-          >
-            <Globe className="w-4 h-4" />
-          </div>
-          <span className={`text-[10px] tracking-tight mt-0.5 ${activeTab === 'servers' ? 'font-black' : 'font-semibold'}`}>
-            Servers
           </span>
         </button>
       </div>

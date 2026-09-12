@@ -3,7 +3,6 @@ import {
   Play, 
   Camera, 
   Swords, 
-  Globe, 
   Zap, 
   Heart, 
   Shield, 
@@ -11,21 +10,23 @@ import {
   Crown,
   ChevronRight,
   Compass,
-  Anvil
+  Anvil,
+  Users
 } from 'lucide-react';
 import { BattleCreature } from '../../types/creature';
 import { OBJECT_PRESETS } from '../../data/creaturePresets';
-import { PlatformUser } from '../../types/platform';
+import { PlatformUser, GameRoom } from '../../types/platform';
 import { INITIAL_USER } from '../../data/platformData';
 import { LobbyPetStage } from './LobbyPetStage';
 import { CreatureMorphModal } from '../morph/CreatureMorphModal';
 import { CybertronPassModal } from './CybertronPassModal';
+import { PlayWithFriendsModal } from './PlayWithFriendsModal';
 import { getForgeCombatBonuses } from '../../utils/forgeManager';
 import confetti from 'canvas-confetti';
 
 interface GameCatalogProps {
   onLaunchGame: (gameId: string, mode?: 'classic' | 'rush' | 'royale') => void;
-  onOpenServers: () => void;
+  onLaunchFriendRoom?: (room: GameRoom) => void;
   onOpenExpedition?: () => void;
   onOpenForge?: () => void;
   activeCreature?: BattleCreature;
@@ -37,7 +38,7 @@ interface GameCatalogProps {
 
 export const GameCatalog: React.FC<GameCatalogProps> = ({
   onLaunchGame,
-  onOpenServers,
+  onLaunchFriendRoom,
   onOpenExpedition,
   onOpenForge,
   activeCreature: externalActiveCreature,
@@ -66,6 +67,7 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({
   const [isMorphModalOpen, setIsMorphModalOpen] = useState(false);
   const [isCybertronPassOpen, setIsCybertronPassOpen] = useState(false);
   const [isSwitchRobotOpen, setIsSwitchRobotOpen] = useState(false);
+  const [isPlayWithFriendsOpen, setIsPlayWithFriendsOpen] = useState(false);
   const [selectedMode, setSelectedMode] = useState<'classic' | 'rush' | 'royale'>('classic');
 
   const baseHp = activeCreature.stats?.hp || 450;
@@ -286,6 +288,15 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({
               <span>BATTLE NOW</span>
             </button>
 
+            {/* Play with Friends Option */}
+            <button
+              onClick={() => setIsPlayWithFriendsOpen(true)}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#0D2B1F] via-[#123829] to-[#0D2B1F] hover:from-[#133F2E] hover:to-[#174835] active:scale-[0.98] border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white font-black text-sm tracking-wider flex items-center justify-center gap-2.5 shadow-md shadow-black/40 transition-all cursor-pointer"
+            >
+              <Users className="w-5 h-5 text-emerald-400" />
+              <span>PLAY WITH FRIENDS</span>
+            </button>
+
             <div className="grid grid-cols-2 gap-2">
               {onOpenExpedition && (
                 <button
@@ -398,6 +409,20 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({
         onUpdateUser={handleUserChange}
         activeCreature={activeCreature}
         onSelectCreature={setActiveCreature}
+      />
+
+      {/* Play With Friends Modal */}
+      <PlayWithFriendsModal
+        isOpen={isPlayWithFriendsOpen}
+        onClose={() => setIsPlayWithFriendsOpen(false)}
+        onLaunchFriendRoom={(room) => {
+          if (onLaunchFriendRoom) {
+            onLaunchFriendRoom(room);
+          } else {
+            onLaunchGame('animatrix-3d-arena', room.mode);
+          }
+        }}
+        defaultMode={selectedMode}
       />
 
     </div>

@@ -1598,10 +1598,9 @@ export class ThreeArenaEngine {
         this.projectileMeshes.set(projLeft.id, meshL);
       }, 75);
     } else if (weaponType === 'mage_spell') {
-      // Mage: Astral homing spell orb
-      const speed = 26;
+      // Mage: Astral high-speed straight spell orb (fires straight along attack vector, no chasing)
+      const speed = 36;
       const radius = 0.75;
-      const nearestRival = this.fighters.find((f) => f.id !== fighter.id && !f.isDead);
       const proj: AttackProjectile = {
         id: `proj-mage-${Date.now()}-${Math.random()}`,
         ownerId: fighter.id,
@@ -1614,10 +1613,9 @@ export class ThreeArenaEngine {
         color: '#a855f7',
         radius,
         element: 'electric',
-        lifetime: 1.6,
+        lifetime: 1.4,
         weaponType: 'mage_spell',
-        isHoming: true,
-        homingTargetId: nearestRival?.id,
+        isHoming: false,
       };
       const mesh = createWeaponProjectileMesh('mage_spell', '#a855f7', radius, rot);
       mesh.position.set(proj.x, proj.y, proj.z);
@@ -3570,8 +3568,8 @@ export class ThreeArenaEngine {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
 
-      // Homing guidance logic
-      if (p.isHoming && p.homingTargetId) {
+      // Homing guidance logic (strictly restricted to special ultimate missiles, normal attacks always fly completely straight)
+      if (p.isHoming && p.homingTargetId && p.vfxType === 'missiles') {
         const target = this.fighters.find((f) => f.id === p.homingTargetId && !f.isDead);
         if (target) {
           const desiredAngle = Math.atan2(target.x - p.x, target.z - p.z);

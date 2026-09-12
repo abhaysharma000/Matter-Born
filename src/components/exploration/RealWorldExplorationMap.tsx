@@ -47,7 +47,8 @@ export const OPENSTREETMAP_CONFIG = {
   attribution:
     '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
   subdomains: ['a', 'b', 'c'],
-  maxZoom: 19,
+  maxZoom: 22,
+  maxNativeZoom: 19,
   minZoom: 2,
 };
 
@@ -149,6 +150,8 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
   // Marker references for efficient imperative updates
   const startMarkerRef = useRef<L.Marker | null>(null);
   const playerMarkerRef = useRef<L.Marker | null>(null);
+  const accuracyCircleRef = useRef<L.Circle | null>(null);
+  const rangeRingsRef = useRef<L.Circle[]>([]);
   const discoveryMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const breadcrumbPolylineRef = useRef<L.Polyline | null>(null);
 
@@ -183,7 +186,8 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
     try {
       const map = L.map(mapContainerRef.current, {
         center: defaultCoord,
-        zoom: 16,
+        zoom: 19,
+        maxZoom: 22,
         zoomControl: false, // Prevents default top-left buttons from colliding with UI
         attributionControl: false,
       });
@@ -191,7 +195,8 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       const tileLayer = L.tileLayer(OPENSTREETMAP_CONFIG.url, {
         attribution: OPENSTREETMAP_CONFIG.attribution,
         subdomains: OPENSTREETMAP_CONFIG.subdomains,
-        maxZoom: OPENSTREETMAP_CONFIG.maxZoom,
+        maxZoom: 22,
+        maxNativeZoom: 19,
         minZoom: OPENSTREETMAP_CONFIG.minZoom,
       });
 
@@ -244,6 +249,12 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         mapInstanceRef.current = null;
         startMarkerRef.current = null;
         playerMarkerRef.current = null;
+        if (accuracyCircleRef.current) {
+          accuracyCircleRef.current.remove();
+          accuracyCircleRef.current = null;
+        }
+        rangeRingsRef.current.forEach((r) => r.remove());
+        rangeRingsRef.current = [];
         discoveryMarkersRef.current.clear();
         breadcrumbPolylineRef.current = null;
       }
@@ -257,7 +268,7 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
     breadcrumbPolylineRef.current.setLatLngs(latLngs);
   }, [breadcrumbs]);
 
-  // Update Start / Origin Marker
+  // Update Start / Origin Marker & Indoor Building Range Rings
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -281,18 +292,39 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         startMarkerRef.current.setLatLng(latLng);
       }
 
+      // Draw concentric building perimeter rings (10m, 20m, 35m, 50m, 75m, 100m)
+      rangeRingsRef.current.forEach((r) => r.remove());
+      rangeRingsRef.current = [];
+
+      const distances = [10, 20, 35, 50, 75, 100];
+      distances.forEach((dist) => {
+        const ring = L.circle(latLng, {
+          radius: dist,
+          color: '#10B981',
+          fillColor: '#10B981',
+          fillOpacity: 0.02,
+          weight: 1.2,
+          dashArray: '3, 5',
+          opacity: 0.5,
+        }).addTo(map);
+        ring.bindTooltip(`${dist}m Ring`, { permanent: false, direction: 'top' });
+        rangeRingsRef.current.push(ring);
+      });
+
       // Initial center on origin if player hasn't moved yet
       if (!isInitialCenteringDone.current && !currentLocation) {
-        map.setView(latLng, 16);
+        map.setView(latLng, 19);
         isInitialCenteringDone.current = true;
       }
     } else if (startMarkerRef.current) {
       startMarkerRef.current.remove();
       startMarkerRef.current = null;
+      rangeRingsRef.current.forEach((r) => r.remove());
+      rangeRingsRef.current = [];
     }
   }, [origin, currentLocation]);
 
-  // Update Player Marker & Camera Follow
+  // Update Player Marker & High-Accuracy GPS Circle & Camera Follow
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -309,7 +341,7 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         marker.bindPopup(`
           <div class="p-2.5 text-stone-900 select-none">
             <div class="text-[10px] font-black uppercase text-sky-700 tracking-wider">CURRENT EXPLORER POSITION</div>
-            <div class="font-bold text-xs text-stone-900 mt-0.5">Live Phone GPS</div>
+            <div class="font-bold text-xs text-stone-900 mt-0.5">High-Accuracy Device GPS</div>
             <div class="text-[11px] text-stone-600 mt-1 flex items-center justify-between gap-2">
               <span>Accuracy:</span>
               <span class="font-bold text-sky-800">±${Math.round(currentLocation.accuracy)}m</span>
@@ -322,13 +354,29 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         playerMarkerRef.current.setIcon(createPlayerIcon(heading));
       }
 
+      // Live GPS accuracy circle
+      const accuracyRadius = Math.max(1.5, Math.min(35, currentLocation.accuracy || 4));
+      if (!accuracyCircleRef.current) {
+        accuracyCircleRef.current = L.circle(latLng, {
+          radius: accuracyRadius,
+          color: '#0284C7',
+          fillColor: '#38BDF8',
+          fillOpacity: 0.18,
+          weight: 1.5,
+          dashArray: '3, 4',
+        }).addTo(map);
+      } else {
+        accuracyCircleRef.current.setLatLng(latLng);
+        accuracyCircleRef.current.setRadius(accuracyRadius);
+      }
+
       // Camera follow logic
       if (isFollowMode) {
-        map.panTo(latLng, { animate: true, duration: 0.5 });
+        map.panTo(latLng, { animate: true, duration: 0.4 });
       }
 
       if (!isInitialCenteringDone.current) {
-        map.setView(latLng, 16);
+        map.setView(latLng, 19);
         isInitialCenteringDone.current = true;
       }
     }
@@ -382,13 +430,13 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
     if (!map) return;
 
     if (currentLocation) {
-      map.setView([currentLocation.latitude, currentLocation.longitude], 17, { animate: true });
+      map.setView([currentLocation.latitude, currentLocation.longitude], 20, { animate: true });
       setIsFollowMode(true);
     } else if (origin) {
-      map.setView([origin.latitude, origin.longitude], 16, { animate: true });
+      map.setView([origin.latitude, origin.longitude], 19, { animate: true });
       setIsFollowMode(true);
     }
-    setRecenterToast('Map centered on player');
+    setRecenterToast('Map centered on player (High Precision View)');
     setTimeout(() => {
       setRecenterToast(null);
     }, 1800);
@@ -636,7 +684,7 @@ export const TacticalRadarMap: React.FC<{
   const baseLat = origin ? origin.latitude : 37.7955;
   const baseLng = origin ? origin.longitude : -122.3937;
 
-  const scale = 0.22;
+  const scale = 1.6;
   const cx = 200;
   const cy = 200;
 
@@ -681,8 +729,8 @@ export const TacticalRadarMap: React.FC<{
         viewBox="0 0 400 400"
         className="w-full h-full max-w-[500px] max-h-[500px] relative z-10 overflow-visible"
       >
-        {/* Milestone concentric range rings */}
-        {[250, 500, 750, 1000].map((dist) => {
+        {/* Indoor building concentric range rings */}
+        {[10, 20, 35, 50, 75, 100].map((dist) => {
           const r = dist * scale;
           return (
             <g key={dist}>

@@ -284,7 +284,7 @@ export function applyExplorationPowerToCreature(
 
   // Honest, deterministic AI causal explanation
   const causalExplanation = safeDistance === 0
-    ? `Local Forge (0m): Baseline chassis power. Object DNA preserves authentic ${baseCreature.originalObject || 'artifact'} characteristics. Explore outdoors (50m+) to forge enhanced fighters.`
+    ? `Local Forge (0m): Baseline chassis power. Object DNA preserves authentic ${baseCreature.originalObject || 'artifact'} characteristics. Walk inside the venue (10m+) to forge enhanced fighters.`
     : `GPS measured ${safeDistance}m real-world exploration. Deterministic forge calculation assigned ${tierConfig.label} (+${tierConfig.powerBonusPercent}% power potential). Object DNA from your ${baseCreature.originalObject || 'artifact'} preserved authentic shape and materials, while unlocking ${perkName}.`;
 
   const metadata: ExplorationScanMetadata = {

@@ -5,15 +5,13 @@ import {
   Compass,
   Swords,
   CheckCircle2,
-  AlertCircle,
-  Plus
+  AlertCircle
 } from 'lucide-react';
 import { BattleCreature } from '../../types/creature';
 import { ForgeUpgradeId, ForgeUpgradesState, ForgeCombatBonuses } from '../../types/forge';
 import { FORGE_UPGRADES_CONFIG } from '../../constants/forgeConfig';
 import {
   getExplorationPoints,
-  setExplorationPoints,
   getForgeUpgrades,
   purchaseForgeUpgrade,
   getForgeCombatBonuses,
@@ -75,17 +73,6 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ creature, onNavigateTa
       setErrorMessage(res.error || 'Not enough EP yet. Explore more to earn some!');
       setTimeout(() => setErrorMessage(null), 4000);
     }
-  };
-
-  // Demo bonus for testing
-  const handleGrantTestEp = () => {
-    const current = getExplorationPoints();
-    const updated = current + 250;
-    setExplorationPoints(updated);
-    setEp(updated);
-    sound.playClick();
-    setPurchaseNotice('✨ +250 EP Added!');
-    setTimeout(() => setPurchaseNotice(null), 2500);
   };
 
   // 4 Specific Tiles as requested in Part 11:
@@ -175,16 +162,6 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ creature, onNavigateTa
                 </span>
               </div>
             </div>
-
-            {/* Quick Demo EP Add Button for Testing */}
-            <button
-              onClick={handleGrantTestEp}
-              className="w-10 h-10 rounded-2xl bg-[#122E23] hover:bg-[#1A4232] border border-[#205742] text-amber-300 flex items-center justify-center transition-transform active:scale-90 cursor-pointer"
-              title="Add test EP"
-              aria-label="Add test EP"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
           </div>
         </div>
       </div>

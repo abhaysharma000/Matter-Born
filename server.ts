@@ -219,6 +219,103 @@ Output ONLY valid JSON matching this schema:
   }
 }`;
 
+// Dynamic combat stat calculator derived from Object Complexity + Distance from starting position
+function deriveServerCombatStats(
+  complexity: any,
+  distanceFromStartMeters: number = 0,
+  objName: string = '',
+  primaryColor: string = '#2563EB'
+) {
+  // Deterministic jitter seeded by object name + color so different objects don't share identical stats
+  const seedString = `${(objName || 'mech').toLowerCase()}-${(primaryColor || '#00E5FF').toLowerCase()}-${complexity?.scaleTier || 'compact'}-${complexity?.complexityScore || 50}`;
+  let hash = 0;
+  for (let i = 0; i < seedString.length; i++) {
+    hash = (hash << 5) - hash + seedString.charCodeAt(i);
+    hash |= 0;
+  }
+  const jitter1 = (((Math.abs(hash) % 19) - 9) / 100); // -0.09 to +0.09
+  const jitter2 = ((((Math.abs(hash >> 3)) % 17) - 8) / 100);
+  const jitter3 = ((((Math.abs(hash >> 6)) % 15) - 7) / 100);
+  const jitter4 = ((((Math.abs(hash >> 9)) % 11) - 5) / 100);
+
+  const recHp = complexity?.recommendedHp || 520;
+  const recAtk = complexity?.recommendedAttack || 86;
+  const recDef = complexity?.recommendedDefense || 60;
+  const recSpd = complexity?.recommendedSpeed || 13;
+
+  const baseHp = Math.round(recHp * (1 + jitter1 * 0.4));
+  const baseAttack = Math.round(recAtk * (1 + jitter2 * 0.6));
+  const baseDefense = Math.round(recDef * (1 + jitter3 * 0.6));
+  const baseSpeed = Math.max(7, Math.round(recSpd + jitter4 * 1.5));
+  const baseAbilityDmg = Math.round((baseAttack * 1.6 + (complexity?.complexityScore || 50) * 0.7) * (1 + jitter1 * 0.5));
+  const baseCooldown = Math.max(3.5, Number((7.0 - (baseSpeed - 10) * 0.25).toFixed(1)));
+
+  const dist = Math.max(0, Number(distanceFromStartMeters) || 0);
+  let distanceBonusPercent = 0;
+  let distanceTierLabel = 'LOCAL ORIGIN';
+  let distanceTierBadge = '⚪';
+
+  if (dist >= 100) {
+    distanceTierLabel = 'GRAND HACKATHON MATRIX';
+    distanceTierBadge = '🔴';
+    distanceBonusPercent = Math.min(85, Math.round(65 + (dist - 100) * 0.2));
+  } else if (dist >= 75) {
+    distanceTierLabel = 'ATRIUM MATRIX';
+    distanceTierBadge = '🟡';
+    distanceBonusPercent = 50;
+  } else if (dist >= 50) {
+    distanceTierLabel = 'MAIN HALL APEX';
+    distanceTierBadge = '🟣';
+    distanceBonusPercent = 40;
+  } else if (dist >= 35) {
+    distanceTierLabel = 'DEV LAB VANGUARD';
+    distanceTierBadge = '🔵';
+    distanceBonusPercent = 30;
+  } else if (dist >= 20) {
+    distanceTierLabel = 'CORRIDOR RANGER';
+    distanceTierBadge = '🌲';
+    distanceBonusPercent = 20;
+  } else if (dist >= 10) {
+    distanceTierLabel = 'HACKATHON SCOUT';
+    distanceTierBadge = '🟢';
+    distanceBonusPercent = 10;
+  }
+
+  const bonusFraction = distanceBonusPercent / 100;
+  const hpBonus = Math.round(baseHp * bonusFraction * 0.75);
+  const attackBonus = Math.round(baseAttack * bonusFraction * 0.85);
+  const defenseBonus = Math.round(baseDefense * bonusFraction * 0.70);
+  const speedBonus = Math.round(bonusFraction * 3.0);
+  const abilityDmgBonus = Math.round(baseAbilityDmg * bonusFraction * 0.80);
+
+  const finalHp = baseHp + hpBonus;
+  const finalAttack = baseAttack + attackBonus;
+  const finalDefense = baseDefense + defenseBonus;
+  const finalSpeed = baseSpeed + speedBonus;
+  const finalAbilityDmg = baseAbilityDmg + abilityDmgBonus;
+
+  const powerRating = Math.round(
+    finalHp * 0.7 + finalAttack * 4.0 + finalDefense * 3.2 + finalSpeed * 12 + finalAbilityDmg * 2.0
+  );
+
+  return {
+    hp: finalHp,
+    attack: finalAttack,
+    defense: finalDefense,
+    speed: finalSpeed,
+    abilityDamage: finalAbilityDmg,
+    abilityCooldown: baseCooldown,
+    powerRating,
+    baseStats: { hp: baseHp, attack: baseAttack, defense: baseDefense, speed: baseSpeed, abilityDamage: baseAbilityDmg },
+    distanceBuffs: { hp: hpBonus, attack: attackBonus, defense: defenseBonus, speed: speedBonus, abilityDamage: abilityDmgBonus },
+    distanceFromStartMeters: dist,
+    distanceTierLabel,
+    distanceTierBadge,
+    distanceBonusPercent,
+    distanceMultiplier: 1 + bonusFraction,
+  };
+}
+
 // Server-side object scale & structural complexity evaluator
 function evaluateServerObjectScale(hint: string = '', clientAnalyzed?: any) {
   if (clientAnalyzed?.complexity) {
@@ -873,7 +970,12 @@ function synthesizeVisualTransmutation(
 }
 
 // Normalizer ensuring creature data ALWAYS contains a complete, robust Object Recognition 2.0 DNA
-function ensureStructuredObjectDna(creature: any, clientAnalyzed?: any, promptHint: string = '') {
+function ensureStructuredObjectDna(
+  creature: any,
+  clientAnalyzed?: any,
+  promptHint: string = '',
+  distanceFromStartMeters: number = 0
+) {
   if (!creature) return creature;
 
   const objName = creature.originalObject || creature.name || promptHint || 'Physical Artifact';
@@ -1038,11 +1140,37 @@ function ensureStructuredObjectDna(creature: any, clientAnalyzed?: any, promptHi
     dna.gameplayIdentity.combatDna = combatDna;
   }
 
+  // 9. Strict Dynamic State & Power Scaling (Object Complexity + Distance from Start)
+  const dist = Number(distanceFromStartMeters) || Number(creature.distanceExplored) || 0;
+  const derivedStats = deriveServerCombatStats(complexity, dist, objName, primary);
+  creature.stats = {
+    hp: derivedStats.hp,
+    attack: derivedStats.attack,
+    defense: derivedStats.defense,
+    speed: derivedStats.speed,
+  };
+  creature.powerRating = derivedStats.powerRating;
+  creature.derivedStats = derivedStats;
+  creature.distanceExplored = dist;
+  if (creature.specialAbility) {
+    creature.specialAbility.damage = derivedStats.abilityDamage;
+    creature.specialAbility.cooldown = derivedStats.abilityCooldown;
+  }
+  if (dna.gameplayIdentity) {
+    dna.gameplayIdentity.combatStats = derivedStats;
+    dna.gameplayIdentity.distancePowerTier = {
+      distanceMeters: dist,
+      bonusPercent: derivedStats.distanceBonusPercent,
+      tierLabel: derivedStats.distanceTierLabel,
+      tierBadge: derivedStats.distanceTierBadge,
+    };
+  }
+
   return creature;
 }
 
 // Procedural generator that dynamically crafts a custom creature tailored to the photo's colors and hint
-function generateProceduralCreature(hint: string, clientAnalyzed?: any) {
+function generateProceduralCreature(hint: string, clientAnalyzed?: any, distanceFromStartMeters: number = 0) {
   const h = (hint || "").toLowerCase();
   const primary = clientAnalyzed?.primaryHex || "#00E5FF";
   const secondary = clientAnalyzed?.secondaryHex || "#7C4DFF";
@@ -1809,7 +1937,7 @@ function generateProceduralCreature(hint: string, clientAnalyzed?: any) {
     },
   };
 
-  return ensureStructuredObjectDna(baseCreature, clientAnalyzed, hint);
+  return ensureStructuredObjectDna(baseCreature, clientAnalyzed, hint, distanceFromStartMeters);
 }
 
 // Fallback procedural creatures if API key is not configured or fails
@@ -1987,18 +2115,26 @@ app.get("/api/health", (req, res) => {
 
 // API: Convert Photo to 3D Battle Creature via Gemini Multimodal AI
 app.post("/api/creature/generate", async (req, res) => {
-  const { imageBase64, mimeType = "image/jpeg", promptHint = "", clientAnalyzed } = req.body;
+  const {
+    imageBase64,
+    mimeType = "image/jpeg",
+    promptHint = "",
+    clientAnalyzed,
+    distanceFromStartMeters = 0,
+  } = req.body;
+  const currentDistance = Math.max(0, Number(distanceFromStartMeters) || 0);
+
   try {
     const ai = getGenAI();
 
     if (!ai) {
       console.log("No GEMINI_API_KEY configured; synthesizing procedural creature from image colors and hint");
-      const creature = generateProceduralCreature(promptHint, clientAnalyzed);
+      const creature = generateProceduralCreature(promptHint, clientAnalyzed, currentDistance);
       return res.json({
         success: true,
         creature,
         isAIGenerated: false,
-        note: "Procedurally generated based on detected real-world object colors & geometry.",
+        note: "Procedurally generated based on detected real-world object colors, complexity & distance.",
       });
     }
 
@@ -2031,22 +2167,34 @@ app.post("/api/creature/generate", async (req, res) => {
       ? `Visual Sensor Detection: Dominant object color is ${clientAnalyzed.primaryHex}, secondary accent is ${clientAnalyzed.secondaryHex}. Set primaryColor and secondaryColor to faithfully reflect these real colors.`
       : "";
 
-    const textPrompt = `CRITICAL HACKATHON MISSION: ANIMATRIX OBJECT RECOGNITION 2.0
-Examine this photo captured by the player.
-1. Perform authentic, OPEN-ENDED visual recognition of the primary real-world object (e.g. blue cardboard box, office chair, commuter bicycle, backpack, oak tree, building/sign, power tool, shoes, mug, etc.). You are NOT restricted to presets!
-2. Be CONSERVATIVE: Identify the primary foreground physical object vs background clutter. Assign recognitionConfidence (0.0 to 1.0). If multiple interpretations are possible, provide alternativeInterpretations.
-3. INHERIT VISUAL IDENTITY: Extract dominant colors (must map to primaryColor and major armor plates) and 3 to 5 signature features that make this object recognizable. Provide geometryHints for 3D model generation.
-4. MAP PHYSICAL TRAITS TO GAMEPLAY:
-   - Size/Mass determines combat tier and stats.
-   - Material, rigidity, and density translate into specific gameplay buffs/debuffs in propertyConsequences (e.g. Rigid hull -> +Defense buff; Lightweight -> +Mobility; Cardboard/Organic -> Fire vulnerability; Conductive metal -> Shock vulnerability).
+    const textPrompt = `CRITICAL HACKATHON MISSION: HIGH-ACCURACY VISUAL OBJECT IDENTIFICATION
+Examine this photo captured by the player. Perform deep, authentic object recognition:
+1. FOCUS STRICTLY ON THE PRIMARY FOREGROUND PHYSICAL OBJECT:
+   - Identify the main physical item being presented to the camera (e.g., coffee mug, water bottle, laptop, desk chair, keyboard, smartphone, sneakers, backpack, banana, power tool, pen, etc.).
+   - Reject background noise (walls, carpet, floor tiles, shadows, surrounding ambient room furniture).
+   - Read any visible brand names, logos, or printed typography on the item (e.g., 'Apple', 'Dell', 'Logitech', 'Hydro Flask', 'Nike', 'Sharpie') and integrate into 'originalObject' and 'name'.
+2. METICULOUS STRUCTURAL COMPLEXITY & COMPONENT ASSESSMENT:
+   - Evaluate 'structuralComplexity':
+     * 'simple': Solid/monolithic single-material items with no or few moving parts (e.g. pen, key, mug, apple, notebook).
+     * 'moderate': Multi-part functional consumer goods (e.g. water bottle with latch, shoe with sole and laces, stapler, backpack).
+     * 'complex': Articulated mechanical devices or electronics (e.g. office swivel chair, bicycle, power drill, keyboard, guitar).
+     * 'ultra-complex': High-density electro-mechanical systems or vehicles (e.g. laptop, car engine, server rack, robotic unit).
+   - Estimate realistic mass ('estimatedMassClass') and physical rigidity.
+3. AUTHENTIC COLOR & GEOMETRY INHERITANCE:
+   - Extract the exact primary and secondary colors of the physical object.
+   - List 3 to 5 signature physical features that make this object immediately recognizable. Provide geometryHints for 3D model generation.
+4. MAP PHYSICAL TRAITS TO GAMEPLAY ATTRIBUTES:
+   - Real-world size, mass, and structural complexity determine combat tiers and base stats.
+   - Distinct material properties yield logical combat advantages and vulnerabilities in 'propertyConsequences'.
 ${promptHint ? `Player provided note: "${promptHint}".` : ""}
 ${colorHint}
+Player current exploration distance from starting position: ${currentDistance} meters.
 Output strictly valid JSON matching the schema including the complete objectDna structure.`;
 
     parts.push({ text: textPrompt });
 
-    // Cascading models for high reliability (gemini-3.1-flash-lite -> gemini-flash-latest -> gemini-3.8-flash)
-    const candidateModels = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"];
+    // Cascading models: prioritize gemini-3.8-flash for highest multimodal vision accuracy
+    const candidateModels = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
     let lastError: any = null;
     let creatureData: any = null;
 
@@ -2119,8 +2267,8 @@ Output strictly valid JSON matching the schema including the complete objectDna 
         creatureData.visualParams.scale = Math.min(creatureData.visualParams.scale || 1.0, 0.94);
       }
 
-      // Enforce structured Object Recognition 2.0 DNA
-      creatureData = ensureStructuredObjectDna(creatureData, clientAnalyzed, promptHint);
+      // Enforce structured Object Recognition 2.0 DNA with distance calculation
+      creatureData = ensureStructuredObjectDna(creatureData, clientAnalyzed, promptHint, currentDistance);
 
       return res.json({
         success: true,
@@ -2132,8 +2280,8 @@ Output strictly valid JSON matching the schema including the complete objectDna 
     throw lastError || new Error("All AI models failed to respond");
   } catch (error: any) {
     console.error("Gemini Creature Generation Error:", error);
-    // Intelligent procedural synthesis matching the user's specific photo & hint!
-    const customFallback = generateProceduralCreature(promptHint, clientAnalyzed);
+    // Intelligent procedural synthesis matching the user's specific photo, complexity & distance
+    const customFallback = generateProceduralCreature(promptHint, clientAnalyzed, currentDistance);
     return res.json({
       success: true,
       creature: customFallback,
