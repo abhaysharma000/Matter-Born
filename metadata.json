@@ -1,0 +1,6 @@
+{
+  "name": "Animatrix 3D: Object Creature Arena",
+  "description": "Mobile 3D battle arena with real-world GPS exploration, Live Google Maps tracking, and Gemini AI. Physically explore outdoors to reach discovery milestones, scan real-world objects, and transmute them into authentic 3D mechs.",
+  "requestFramePermissions": ["camera", "microphone", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

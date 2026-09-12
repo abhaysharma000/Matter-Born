@@ -1,0 +1,242 @@
+import React from 'react';
+import {initialize, mockInstances} from '@googlemaps/jest-mocks';
+import {cleanup, render} from '@testing-library/react';
+
+import {Polygon} from '../polygon';
+import {useMap} from '../../hooks/use-map';
+import MockedFunction = jest.MockedFunction;
+
+jest.mock('../../hooks/use-map');
+
+let useMapMock: jest.MockedFn<typeof useMap>;
+let mapInstance: google.maps.Map;
+let createPolygonSpy: jest.Mock;
+
+beforeEach(() => {
+  initialize();
+  jest.clearAllMocks();
+
+  useMapMock = jest.mocked(useMap);
+  mapInstance = new google.maps.Map(document.createElement('div'));
+  useMapMock.mockReturnValue(mapInstance);
+
+  // overwrite polygon mock so we can spy on the constructor
+  createPolygonSpy = jest.fn();
+  google.maps.Polygon = class extends google.maps.Polygon {
+    constructor(opts?: google.maps.PolygonOptions | null) {
+      createPolygonSpy(opts);
+      super(opts);
+    }
+  };
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+test('polygon should be initialized', () => {
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+  render(<Polygon paths={paths} />);
+
+  expect(createPolygonSpy).toHaveBeenCalled();
+
+  const polygons = mockInstances.get(google.maps.Polygon);
+  expect(polygons).toHaveLength(1);
+
+  const [polygon] = polygons;
+  expect(polygon.setMap).toHaveBeenCalled();
+  const setMapMock = polygon.setMap as MockedFunction<typeof polygon.setMap>;
+  const [map] = setMapMock.mock.calls[0];
+  expect(map).toBeInstanceOf(google.maps.Map);
+});
+
+test('polygon should have a click listener', () => {
+  const handleClick = jest.fn();
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+
+  render(<Polygon paths={paths} onClick={handleClick} />);
+
+  expect(createPolygonSpy).toHaveBeenCalled();
+
+  const polygonMocks = mockInstances.get(google.maps.Polygon);
+  const polygonMock = polygonMocks[0];
+
+  expect(google.maps.event.addListener).toHaveBeenCalledWith(
+    polygonMock,
+    'click',
+    expect.any(Function)
+  );
+});
+
+test('polygon should update options on rerender', () => {
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+
+  const {rerender} = render(<Polygon paths={paths} fillColor="#ff0000" />);
+
+  expect(createPolygonSpy).toHaveBeenCalled();
+
+  const polygons = mockInstances.get(google.maps.Polygon);
+  const polygon = polygons[0];
+
+  rerender(<Polygon paths={paths} fillColor="#00ff00" />);
+
+  expect(polygon.setOptions).toHaveBeenCalledWith(
+    expect.objectContaining({fillColor: '#00ff00'})
+  );
+});
+
+test('polygon should not re-apply the options it was constructed with', () => {
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4}
+  ];
+
+  render(<Polygon paths={paths} fillOpacity={0.2} />);
+
+  const polygons = mockInstances.get(google.maps.Polygon);
+  const polygon = polygons[0];
+
+  // the constructor already received the full option set, so writing it again
+  // would rebuild the vertex handles for nothing
+  expect(polygon.setOptions).not.toHaveBeenCalled();
+});
+
+test('polygon should not re-apply options to an external instance', () => {
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4}
+  ];
+
+  const external = new google.maps.Polygon();
+
+  render(<Polygon polygon={external} paths={paths} fillOpacity={0.2} />);
+
+  // the creation effect applies them once; the hook must not repeat it
+  expect(external.setOptions).toHaveBeenCalledTimes(1);
+});
+
+test('polygon should only send the options that changed', () => {
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+
+  const {rerender} = render(<Polygon paths={paths} fillOpacity={0.2} />);
+
+  const polygons = mockInstances.get(google.maps.Polygon);
+  const polygon = polygons[0];
+
+  (polygon.setOptions as jest.Mock).mockClear();
+
+  rerender(<Polygon paths={paths} fillOpacity={0.5} />);
+
+  // re-applying `editable` or `draggable` makes the maps api rebuild the
+  // vertex handles, so unchanged values must not be sent again
+  expect(polygon.setOptions).toHaveBeenCalledTimes(1);
+  // assert the keys: toHaveBeenCalledWith ignores undefined-valued ones,
+  // so it would also accept an extra `editable: undefined`
+  const [sent] = (polygon.setOptions as jest.Mock).mock.calls[0];
+  expect(Object.keys(sent)).toEqual(['fillOpacity']);
+  expect(sent.fillOpacity).toBe(0.5);
+});
+
+test('polygon should not touch options when nothing changed', () => {
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+
+  const {rerender} = render(<Polygon paths={paths} fillOpacity={0.2} />);
+
+  const polygons = mockInstances.get(google.maps.Polygon);
+  const polygon = polygons[0];
+
+  (polygon.setOptions as jest.Mock).mockClear();
+
+  rerender(<Polygon paths={paths} fillOpacity={0.2} />);
+
+  expect(polygon.setOptions).not.toHaveBeenCalled();
+});
+
+test('polygon should be removed from map on unmount', () => {
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+  const {unmount} = render(<Polygon paths={paths} />);
+
+  const polygons = mockInstances.get(google.maps.Polygon);
+  const polygon = polygons[0];
+
+  unmount();
+
+  expect(polygon.setMap).toHaveBeenCalledWith(null);
+});
+
+test('polygon should use defaultPaths for initial value', () => {
+  const defaultPaths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+  render(<Polygon defaultPaths={defaultPaths} />);
+
+  expect(createPolygonSpy).toHaveBeenCalledWith(
+    expect.objectContaining({paths: defaultPaths})
+  );
+});
+
+test('polygon paths prop should take precedence over defaultPaths', () => {
+  const paths = [
+    {lat: 7, lng: 8},
+    {lat: 9, lng: 10},
+    {lat: 11, lng: 12}
+  ];
+  const defaultPaths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+  render(<Polygon paths={paths} defaultPaths={defaultPaths} />);
+
+  expect(createPolygonSpy).toHaveBeenCalledWith(
+    expect.objectContaining({paths})
+  );
+});
+
+test('polygon should call onPathsChanged on dragend', () => {
+  const handlePathsChanged = jest.fn();
+  const paths = [
+    {lat: 1, lng: 2},
+    {lat: 3, lng: 4},
+    {lat: 5, lng: 6}
+  ];
+
+  render(
+    <Polygon paths={paths} draggable onPathsChanged={handlePathsChanged} />
+  );
+
+  const polygonMocks = mockInstances.get(google.maps.Polygon);
+  const polygonMock = polygonMocks[0];
+
+  expect(google.maps.event.addListener).toHaveBeenCalledWith(
+    polygonMock,
+    'dragend',
+    expect.any(Function)
+  );
+});

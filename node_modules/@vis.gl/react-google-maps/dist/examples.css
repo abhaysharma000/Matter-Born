@@ -1,0 +1,267 @@
+.control-panel {
+  font-size: 14px;
+  line-height: 18px;
+  width: 284px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.15);
+  margin: 24px;
+  padding: 12px 24px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  outline: none;
+  cursor: auto;
+  box-sizing: border-box;
+}
+
+.control-panel h3 {
+  font-size: 1.2em;
+  font-weight: 500;
+  margin: 8px 0;
+}
+
+.control-panel h4 {
+  font-weight: 500;
+  margin: 8px 0;
+}
+
+.control-panel p {
+  margin-bottom: 16px;
+}
+
+.control-panel .links {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.control-panel .links a {
+  font-weight: bold;
+  color: #486865;
+  font-size: 11px;
+}
+
+.terra-draw-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: rgba(0, 0, 0, 0.3) 0px 1px 4px -1px;
+  margin: 12px;
+}
+
+.terra-draw-toolbar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.terra-draw-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.terra-draw-button {
+  border: 1px solid #d5d5d5;
+  background: #fff;
+  color: #2e2e2e;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.terra-draw-button:hover:not(:disabled) {
+  border-color: #486865;
+  color: #486865;
+}
+
+.terra-draw-button.active {
+  background: #486865;
+  color: #fff;
+  border-color: #486865;
+}
+
+.terra-draw-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.terra-draw-file-input {
+  display: none;
+}
+
+html[data-theme='dark'] .control-panel {
+  background: var(--ifm-background-color);
+}
+
+html[data-theme='dark'] .gm-style {
+  color: var(--ifm-color-black);
+}
+.autocomplete-container input,
+.autocomplete-control {
+  box-sizing: border-box;
+}
+
+.autocomplete-control {
+  margin: 24px;
+  background: #fff;
+}
+
+.autocomplete-container {
+  width: 300px;
+}
+.autocomplete-container input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 18px;
+}
+
+.autocomplete-container .custom-list {
+  width: 100%;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.autocomplete-container .custom-list-item {
+  padding: 8px;
+}
+
+.autocomplete-container .custom-list-item:hover {
+  background: lightgrey;
+  cursor: pointer;
+}
+
+.autocomplete-mode {
+  margin: 8px 0;
+}
+
+.drawing-history {
+  margin: 5px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 27px;
+  box-sizing: border-box;
+}
+
+.drawing-history button {
+  height: 100%;
+  background: rgb(255, 255, 255);
+  border: 0px;
+  margin: 0px;
+  cursor: pointer;
+  color: rgb(86, 86, 86);
+  border-bottom-left-radius: 2px;
+  border-top-left-radius: 2px;
+  box-shadow: rgba(0, 0, 0, 0.3) 0px 1px 4px -1px;
+}
+
+.drawing-history button svg {
+  width: 20px;
+}
+.drawing-history button path {
+  fill: rgb(86, 86, 86);
+}
+
+.drawing-history button:hover {
+  background: rgb(235, 235, 235);
+}
+
+.drawing-history button.is-active {
+  background: rgb(255, 231, 231);
+  color: rgb(171, 25, 25);
+}
+
+.drawing-history button:disabled:hover,
+.drawing-history button:disabled {
+  background: rgb(255, 255, 255);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.drawing-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drawing-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 27px;
+  box-sizing: border-box;
+}
+
+.drawing-toolbar button {
+  height: 100%;
+  background: rgb(255, 255, 255);
+  border: 0px;
+  margin: 0px;
+  cursor: pointer;
+  color: rgb(86, 86, 86);
+  padding: 0 8px;
+  border-radius: 2px;
+  box-shadow: rgba(0, 0, 0, 0.3) 0px 1px 4px -1px;
+  font-size: 12px;
+}
+
+.drawing-toolbar button:hover {
+  background: rgb(235, 235, 235);
+}
+
+.drawing-toolbar button.is-active {
+  background: rgb(227, 239, 255);
+  color: rgb(25, 82, 171);
+}
+
+.static-map-grid,
+.static-map-grid * {
+  box-sizing: border-box;
+}
+
+.static-map-grid {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+  width: 100%;
+  gap: 16px;
+  padding: 16px;
+  background: darkgray;
+}
+
+.static-map-grid .map-container {
+  display: flex;
+  position: relative;
+}
+
+.static-map-grid .map-container:nth-child(1) {
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.static-map-grid .map-container:nth-child(2) {
+  align-items: flex-end;
+}
+.static-map-grid .map-container:nth-child(3) {
+  justify-content: flex-end;
+}
+
+.static-map-grid .map {
+  object-fit: contain;
+  position: absolute;
+  max-height: 100%;
+  width: auto;
+  max-width: 100%;
+}
