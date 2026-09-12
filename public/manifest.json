@@ -1,6 +1,6 @@
 {
-  "short_name": "Animatrix 3D",
-  "name": "Animatrix 3D: Object Creature Arena",
+  "short_name": "Matter-Born",
+  "name": "Matter-Born: Object Creature Arena",
   "description": "Mobile 3D battle arena with real-world GPS exploration, Live OpenStreetMap tracking, Gemini AI, and The Forge progression system.",
   "icons": [
     {
@@ -23,8 +23,8 @@
     }
   ],
   "start_url": "/",
-  "background_color": "#EDF5EE",
-  "theme_color": "#EDF5EE",
+  "background_color": "#0D281E",
+  "theme_color": "#0D281E",
   "display": "standalone",
   "orientation": "portrait",
   "categories": ["games", "entertainment", "action"]

@@ -4,7 +4,7 @@ import { SKINS } from '../utils/constants';
 export const PLATFORM_GAMES: PlatformGame[] = [
   {
     id: 'animatrix-3d-arena',
-    title: 'Animatrix 3D: Object Creature Arena',
+    title: 'Matter-Born: Object Creature Arena',
     tagline: 'Snap real-world objects with Generative AI to morph into 3D combat creatures',
     description: 'Photograph any real-world physical object (coffee mug, cactus, sneaker, headset, pepper) and watch Gemini AI transform it into your customized 3D creature with unique morphology, stats, and special powers. Battle in real-time 3D multiplayer coliseums to survive!',
     category: '3D Worlds',

@@ -31,7 +31,6 @@ import { CreatureChatModal } from '../arena3d/CreatureChatModal';
 import { REAL_WORLD_ENVIRONMENTS, detectRealWorldEnvironment } from '../../data/environmentPresets';
 import { OBJECT_PRESETS } from '../../data/creaturePresets';
 import { sound } from '../../utils/audio';
-import { PWAInstallButton } from '../pwa/PWAInstallButton';
 import { DetectedPlayerPattern } from '../../types/tacticalDirector';
 
 interface PlatformGamePlayerProps {
@@ -414,7 +413,7 @@ export const PlatformGamePlayer: React.FC<PlatformGamePlayerProps> = ({
           </button>
 
           <span className="font-heading font-black text-white text-sm hidden sm:inline">
-            Animatrix 3D
+            Matter-Born
           </span>
         </div>
 
@@ -474,8 +473,6 @@ export const PlatformGamePlayer: React.FC<PlatformGamePlayerProps> = ({
 
         {/* Right: Sound, Fullscreen & Controls */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <PWAInstallButton />
-
           <button
             onClick={toggleSound}
             className="p-1.5 sm:p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition-colors"

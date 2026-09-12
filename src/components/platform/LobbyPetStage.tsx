@@ -54,28 +54,28 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
     backLight.position.set(-4, 3, -4);
     scene.add(backLight);
 
-    // Lite Creamy Green Minimal Pedestal (Surface top exactly at y = 0.00)
+    // Dark Futuristic Sci-Fi Pedestal with glowing emerald accent
     const pedestalGroup = new THREE.Group();
     const pedGeo = new THREE.CylinderGeometry(2.0, 2.1, 0.25, 32);
     const pedMat = new THREE.MeshStandardMaterial({
-      color: 0xdce8dd,
-      roughness: 0.6,
-      metalness: 0.1,
+      color: 0x0c251c,
+      roughness: 0.35,
+      metalness: 0.75,
     });
     const pedestalMesh = new THREE.Mesh(pedGeo, pedMat);
     pedestalMesh.position.y = -0.125;
     pedestalMesh.receiveShadow = true;
     pedestalGroup.add(pedestalMesh);
 
-    // Fresh Emerald Accent Ring on floor edge
+    // Glowing Neon Emerald Accent Ring on floor edge
     const ringGeo = new THREE.TorusGeometry(2.02, 0.04, 16, 32);
     ringGeo.rotateX(Math.PI / 2);
     const ringMat = new THREE.MeshStandardMaterial({
-      color: 0x16a34a,
-      metalness: 0.5,
-      roughness: 0.3,
-      emissive: 0x15803d,
-      emissiveIntensity: 0.3,
+      color: 0x10b981,
+      metalness: 0.2,
+      roughness: 0.2,
+      emissive: 0x059669,
+      emissiveIntensity: 0.85,
     });
     const ringMesh = new THREE.Mesh(ringGeo, ringMat);
     ringMesh.position.y = 0.005;
@@ -225,7 +225,9 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
   const isDecepticon = creature.faction === 'Decepticon';
 
   return (
-    <div className="relative w-full rounded-2xl bg-[#F4F9F4] border border-[#CFE2D3] p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-sm">
+    <div className="relative w-full rounded-3xl bg-[#091B14] border border-[#184635] p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-2xl">
+      {/* Background ambient sci-fi glow */}
+      <div className="absolute inset-0 bg-radial from-emerald-500/10 via-transparent to-transparent pointer-events-none" />
       
       {/* Top Info Bar */}
       <div className="w-full flex items-center justify-between z-10">
@@ -233,24 +235,24 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
           {creature.faction && (
             <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${
               isDecepticon
-                ? 'bg-emerald-950 text-emerald-100 border border-emerald-800'
-                : 'bg-emerald-100 text-emerald-950 border border-emerald-300'
+                ? 'bg-purple-950/80 text-purple-200 border border-purple-500/40'
+                : 'bg-emerald-950/80 text-emerald-200 border border-emerald-500/40'
             }`}>
               {creature.faction}
             </span>
           )}
-          <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-[#E8F2EA] text-[#143823] border border-[#BCD8C3] capitalize">
+          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#0E2A1F] text-emerald-300 border border-[#1E5C44] capitalize">
             {creature.element}
           </span>
         </div>
 
         <button
           onClick={onSnapNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E8F2EA] hover:bg-[#DFEDE2] border border-[#BCD8C3] text-xs font-bold text-[#143823] transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-xs font-bold text-emerald-300 transition-colors cursor-pointer shadow-sm active:scale-95"
           title="Snap a photo to morph a new robot"
         >
-          <Camera className="w-3.5 h-3.5 text-emerald-700" />
-          <span>Transform</span>
+          <Camera className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Scan New</span>
         </button>
       </div>
 
@@ -264,9 +266,9 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
 
         {/* 360 Rotation & Attack Hint Badge */}
         <div className="absolute bottom-2 left-2 z-10 pointer-events-none">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E8F2EA]/90 border border-[#BCD8C3] text-[10px] font-bold text-[#4D6957] backdrop-blur-xs shadow-xs">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#071912]/80 border border-[#184635] text-[10px] font-bold text-[#8BA996] backdrop-blur-md shadow-xs">
             <span>🔄 Drag to Rotate 360°</span>
-            <span className="text-stone-400">•</span>
+            <span className="text-[#32634D]">•</span>
             <span>Tap to Strike</span>
           </div>
         </div>
@@ -278,23 +280,23 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
               e.stopPropagation();
               setIsWalkingMode(!isWalkingMode);
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E8F2EA]/90 hover:bg-[#DFEDE2] border border-[#BCD8C3] text-[11px] font-bold text-[#143823] shadow-xs transition-colors cursor-pointer backdrop-blur-xs"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#071912]/80 hover:bg-[#0E2A1F] border border-[#184635] text-[11px] font-bold text-emerald-200 shadow-xs transition-colors cursor-pointer backdrop-blur-md"
             title="Toggle walking locomotion on platform"
           >
-            <span className={`w-2 h-2 rounded-full ${isWalkingMode ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} />
-            <span>{isWalkingMode ? 'Walking on Platform' : 'Standby Guard'}</span>
+            <span className={`w-2 h-2 rounded-full ${isWalkingMode ? 'bg-emerald-400 animate-pulse' : 'bg-stone-500'}`} />
+            <span>{isWalkingMode ? 'Walking' : 'Standby'}</span>
           </button>
         </div>
       </div>
 
       {/* Creature Identity & Origin */}
       <div className="w-full z-10 text-center space-y-1">
-        <h2 className="text-xl sm:text-2xl font-black font-heading text-[#14532D] tracking-wide">
+        <h2 className="text-xl sm:text-2xl font-black font-heading text-white tracking-wide">
           {creature.name}
         </h2>
         {creature.originalObject && (
-          <p className="text-xs text-[#4D6957]">
-            From: <span className="text-emerald-800 font-semibold">{creature.originalObject}</span>
+          <p className="text-xs text-[#8BA996]">
+            From: <span className="text-emerald-400 font-semibold">{creature.originalObject}</span>
           </p>
         )}
       </div>

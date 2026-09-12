@@ -99,21 +99,21 @@ export default function App() {
   // Launching games
   const handleLaunchGame = (gameId: string, mode: GameMode = 'classic') => {
     setActiveGameId(gameId);
-    setActiveGameTitle('Animatrix 3D: Object Creature Arena');
+    setActiveGameTitle('Matter-Born: Object Creature Arena');
     setActiveMode(mode);
     setActiveRoom(null);
   };
 
   const handleJoinRoom = (room: GameRoom) => {
     setActiveGameId('animatrix-3d-arena');
-    setActiveGameTitle('Animatrix 3D: Object Creature Arena');
+    setActiveGameTitle('Matter-Born: Object Creature Arena');
     setActiveMode(room.mode);
     setActiveRoom(room);
   };
 
   const handleLaunchCustomRoom = (customRoom: GameRoom) => {
     setActiveGameId('animatrix-3d-arena');
-    setActiveGameTitle('Animatrix 3D: Object Creature Arena');
+    setActiveGameTitle('Matter-Born: Object Creature Arena');
     setActiveMode(customRoom.mode);
     setActiveRoom(customRoom);
   };
@@ -149,7 +149,7 @@ export default function App() {
     // 3. Construct match history record
     const historyItem = {
       id: `match-${Date.now()}`,
-      gameTitle: 'Animatrix 3D Arena',
+      gameTitle: 'Matter-Born Arena',
       mode: 'classic' as GameMode,
       territory: 100,
       kills,
@@ -242,7 +242,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#EDF5EE] text-[#143823] flex flex-col selection:bg-emerald-200 selection:text-emerald-950 font-sans relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#0D281E] bg-[radial-gradient(ellipse_100%_75%_at_50%_0%,#133F2C_0%,#0D281E_70%,#092016_100%)] text-white flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200 font-sans relative overflow-x-hidden">
       
       {/* Platform Navigation Bar */}
       <Navbar
@@ -332,25 +332,25 @@ export default function App() {
       />
 
       {/* Desktop Clean Footer (hidden on mobile) */}
-      <footer className="hidden md:block border-t border-[#CFE2D3] bg-[#E4EFE6] px-4 sm:px-6 py-4 text-[#4D6957] text-xs">
+      <footer className="hidden md:block border-t border-[#1B523B] bg-[#0A241A] px-4 sm:px-6 py-4 text-[#8BA996] text-xs">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="font-heading font-black text-[#14532D] text-xs">ANIMATRIX 3D</span>
-            <span className="text-[#A4B5A9]">•</span>
-            <span className="text-[#4D6957]">Transform Real-World Objects into 3D Mech Brawlers</span>
+            <span className="font-heading font-black text-emerald-400 text-xs">Matter-Born</span>
+            <span className="text-[#32634D]">•</span>
+            <span className="text-[#8BA996]">Transform Real-World Objects into 3D Mech Brawlers</span>
           </div>
 
           <div className="flex items-center gap-4 text-xs">
-            <button onClick={() => setActiveTab('games')} className="hover:text-emerald-900 transition-colors font-medium">
+            <button onClick={() => setActiveTab('games')} className="hover:text-emerald-300 transition-colors font-medium">
               Arena
             </button>
-            <button onClick={() => setActiveTab('expedition')} className="hover:text-emerald-900 transition-colors font-medium">
+            <button onClick={() => setActiveTab('expedition')} className="hover:text-emerald-300 transition-colors font-medium">
               Explore
             </button>
-            <button onClick={() => setActiveTab('forge')} className="hover:text-amber-800 transition-colors font-bold text-amber-900">
+            <button onClick={() => setActiveTab('forge')} className="hover:text-amber-300 transition-colors font-bold text-amber-400">
               Forge
             </button>
-            <button onClick={() => setActiveTab('servers')} className="hover:text-emerald-900 transition-colors font-medium">
+            <button onClick={() => setActiveTab('servers')} className="hover:text-emerald-300 transition-colors font-medium">
               Servers
             </button>
           </div>

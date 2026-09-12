@@ -97,30 +97,35 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ creature, onNavigateTa
     id: ForgeUpgradeId;
     title: string;
     icon: string;
+    description: string;
     badgeColor: string;
   }> = [
     {
       id: 'alloy_armor',
-      title: 'INCREASE HEALTH',
+      title: 'HEALTH',
       icon: '❤️',
+      description: 'Increases robot max health',
       badgeColor: 'border-rose-500/40 text-rose-300',
     },
     {
       id: 'energon_overdrive',
-      title: 'FASTER FIRING',
+      title: 'FIRE RATE',
       icon: '🔥',
+      description: 'Reduces projectile cooldown',
       badgeColor: 'border-amber-500/40 text-amber-300',
     },
     {
       id: 'special_core',
-      title: 'UPGRADE SPECIAL',
+      title: 'SPECIAL',
       icon: '✨',
+      description: 'Increases special ability damage',
       badgeColor: 'border-teal-400/40 text-teal-200',
     },
     {
       id: 'impact_amplifier',
-      title: 'INCREASE DAMAGE',
+      title: 'DAMAGE',
       icon: '⚔️',
+      description: 'Increases basic attack damage',
       badgeColor: 'border-emerald-500/40 text-emerald-300',
     },
   ];
@@ -157,16 +162,16 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ creature, onNavigateTa
             </div>
           </div>
 
-          {/* REDEEM YOUR EP + Total EP balance */}
+          {/* Player EP (Energy Points) */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-[#081812] border border-[#205742] shadow-inner">
-              <Zap className="w-6 h-6 text-amber-400 fill-amber-400 animate-pulse shrink-0" />
+              <span className="text-2xl">⭐</span>
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 block">
-                  REDEEM YOUR EP
+                  ENERGY POINTS
                 </span>
                 <span className="text-xl sm:text-2xl font-black font-mono text-white leading-none">
-                  ⚡ {ep.toLocaleString()} <span className="text-xs font-sans font-bold text-amber-400">EP</span>
+                  {ep.toLocaleString()} <span className="text-xs font-sans font-bold text-amber-400">EP</span>
                 </span>
               </div>
             </div>

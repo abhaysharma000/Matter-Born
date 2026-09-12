@@ -75,6 +75,7 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
   const [morphStep, setMorphStep] = useState('');
   const [generatedCreature, setGeneratedCreature] = useState<BattleCreature | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [showAdvancedSpecs, setShowAdvancedSpecs] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -379,40 +380,40 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
   const getElementBadge = (el: CreatureElement) => {
     switch (el) {
       case 'fire':
-        return <span className="flex items-center gap-1 text-xs font-bold text-orange-600"><Flame className="w-3.5 h-3.5" /> Fire</span>;
+        return <span className="flex items-center gap-1 text-xs font-bold text-orange-400"><Flame className="w-3.5 h-3.5" /> Fire</span>;
       case 'electric':
-        return <span className="flex items-center gap-1 text-xs font-bold text-amber-600"><Zap className="w-3.5 h-3.5" /> Electric</span>;
+        return <span className="flex items-center gap-1 text-xs font-bold text-amber-400"><Zap className="w-3.5 h-3.5" /> Electric</span>;
       case 'nature':
-        return <span className="flex items-center gap-1 text-xs font-bold text-emerald-600"><Leaf className="w-3.5 h-3.5" /> Nature</span>;
+        return <span className="flex items-center gap-1 text-xs font-bold text-emerald-400"><Leaf className="w-3.5 h-3.5" /> Nature</span>;
       case 'ice':
-        return <span className="flex items-center gap-1 text-xs font-bold text-cyan-600"><Snowflake className="w-3.5 h-3.5" /> Ice</span>;
+        return <span className="flex items-center gap-1 text-xs font-bold text-cyan-400"><Snowflake className="w-3.5 h-3.5" /> Ice</span>;
       case 'cyber':
-        return <span className="flex items-center gap-1 text-xs font-bold text-fuchsia-600"><Cpu className="w-3.5 h-3.5" /> Cyber</span>;
+        return <span className="flex items-center gap-1 text-xs font-bold text-fuchsia-400"><Cpu className="w-3.5 h-3.5" /> Cyber</span>;
       case 'void':
-        return <span className="flex items-center gap-1 text-xs font-bold text-purple-600"><Moon className="w-3.5 h-3.5" /> Void</span>;
+        return <span className="flex items-center gap-1 text-xs font-bold text-purple-400"><Moon className="w-3.5 h-3.5" /> Void</span>;
       case 'rock':
       default:
-        return <span className="flex items-center gap-1 text-xs font-bold text-stone-600"><Mountain className="w-3.5 h-3.5" /> Earth/Rock</span>;
+        return <span className="flex items-center gap-1 text-xs font-bold text-stone-300"><Mountain className="w-3.5 h-3.5" /> Earth/Rock</span>;
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/40 backdrop-blur-xs overflow-y-auto">
-      <div className="w-full max-w-2xl rounded-2xl bg-[#F4F9F4] border border-[#CFE2D3] p-4 sm:p-7 space-y-4 sm:space-y-6 shadow-2xl relative my-auto max-h-[94vh] overflow-y-auto text-[#143823]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/75 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-2xl rounded-2xl bg-[#071610] border border-[#184635] p-4 sm:p-7 space-y-4 sm:space-y-6 shadow-2xl relative my-auto max-h-[94vh] overflow-y-auto text-white">
         
         {onClose && (
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 sm:top-4 sm:right-4 p-1.5 rounded-lg bg-[#E8F2EA] hover:bg-[#DFEDE2] text-[#4D6957] hover:text-[#143823] z-10 transition-colors cursor-pointer"
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 rounded-xl bg-[#0E281E] hover:bg-[#143B2C] border border-[#1C4D3A] text-[#6DAA8E] hover:text-white z-10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         )}
 
         {/* Header */}
-        <div className="text-center space-y-1 sm:space-y-1.5">
+        <div className="text-center space-y-2">
           {explorationContext ? (
-            <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white border border-emerald-500/50 shadow-md text-left mb-2">
+            <div className="p-3 rounded-xl bg-[#091B14] text-white border border-[#2BE29E]/40 shadow-md text-left mb-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-amber-400 text-amber-950">
@@ -427,26 +428,26 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                     </h4>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-300 bg-emerald-950/60 px-2 py-1 rounded-md border border-emerald-600/40">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <div className="flex items-center gap-1 text-[10px] font-bold text-[#2BE29E] bg-[#0E281E] px-2 py-1 rounded-md border border-[#1C4D3A]">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#2BE29E]" />
                   <span>Stationary Verified</span>
                 </div>
               </div>
-              <p className="text-xs text-emerald-200 mt-1.5 pt-1.5 border-t border-emerald-700/50">
+              <p className="text-xs text-emerald-200 mt-1.5 pt-1.5 border-t border-[#184635]">
                 <strong className="text-amber-300">{explorationContext.bonusTitle}:</strong> {explorationContext.bonusDescription}
               </p>
             </div>
           ) : (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold uppercase tracking-wider">
-              <Wand2 className="w-3.5 h-3.5 text-emerald-700 animate-pulse" />
-              <span>Object Recognition 2.0 Chamber</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0E281E] border border-[#2BE29E]/40 text-[#2BE29E] text-xs font-black uppercase tracking-wider">
+              <Wand2 className="w-3.5 h-3.5 text-[#2BE29E] animate-pulse" />
+              <span>ROBOT SCANNER</span>
             </div>
           )}
-          <h2 className="text-xl sm:text-3xl font-black font-heading text-[#143823] leading-tight">
-            Photograph Any Real Object → Battle Mech
+          <h2 className="text-xl sm:text-3xl font-black font-heading text-white tracking-wide">
+            Scan Real Object → Battle Robot
           </h2>
-          <p className="text-xs sm:text-sm text-[#4D6957] max-w-lg mx-auto">
-            Photograph any physical item. Multimodal AI extracts its matter, geometry, and signature features before morphing into an authentic 3D fighter!
+          <p className="text-xs sm:text-sm text-[#A1D2BC] max-w-lg mx-auto">
+            Photograph any everyday item. AI analyzes its shape, material, and powers to forge a unique 3D battle robot!
           </p>
         </div>
 
@@ -455,20 +456,20 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
           <div className="space-y-4">
             
             {/* Input Selection Tabs */}
-            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1 rounded-xl bg-[#DFEFE2] border border-[#BCD8C3]">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 rounded-xl bg-[#091B14] border border-[#143B2C]">
               <button
                 onClick={() => {
                   setCapturedPhoto(null);
                   setStagedCreature(null);
                   setActiveInputTab('camera');
                 }}
-                className={`py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
+                className={`py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
                   activeInputTab === 'camera'
-                    ? 'bg-emerald-700 text-white shadow-xs font-bold'
-                    : 'text-[#4D6957] hover:text-[#143823]'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-md font-black'
+                    : 'text-[#6DAA8E] hover:text-white'
                 }`}
               >
-                <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Camera className="w-4 h-4" />
                 <span><span className="hidden xs:inline">Live </span>Camera</span>
               </button>
               <button
@@ -477,13 +478,13 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                   setStagedCreature(null);
                   setActiveInputTab('upload');
                 }}
-                className={`py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
+                className={`py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
                   activeInputTab === 'upload'
-                    ? 'bg-emerald-700 text-white shadow-xs font-bold'
-                    : 'text-[#4D6957] hover:text-[#143823]'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-md font-black'
+                    : 'text-[#6DAA8E] hover:text-white'
                 }`}
               >
-                <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Upload className="w-4 h-4" />
                 <span><span className="hidden xs:inline">Upload </span>Photo</span>
               </button>
               <button
@@ -492,13 +493,13 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                   setStagedCreature(null);
                   setActiveInputTab('presets');
                 }}
-                className={`py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
+                className={`py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
                   activeInputTab === 'presets'
-                    ? 'bg-emerald-700 text-white shadow-xs font-bold'
-                    : 'text-[#4D6957] hover:text-[#143823]'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-md font-black'
+                    : 'text-[#6DAA8E] hover:text-white'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Layers className="w-4 h-4" />
                 <span><span className="hidden xs:inline">Object </span>Presets</span>
               </button>
             </div>
@@ -516,7 +517,7 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
             {/* Camera Viewfinder */}
             {activeInputTab === 'camera' && !capturedPhoto && (
               <div className="space-y-3">
-                <div className="relative aspect-video rounded-xl bg-stone-900 border-2 border-emerald-600/40 overflow-hidden flex items-center justify-center">
+                <div className="relative aspect-video rounded-xl bg-[#091B14] border-2 border-[#184635] overflow-hidden flex items-center justify-center">
                   <video
                     ref={videoRef}
                     playsInline
@@ -529,24 +530,24 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
 
                   {/* Camera Loading or Error Fallback Overlay */}
                   {(!cameraActive || isCameraLoading) && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-stone-900/90 z-10 space-y-3">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-[#071610]/95 z-10 space-y-3">
                       {isCameraLoading ? (
                         <>
-                          <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                          <div className="w-10 h-10 border-4 border-[#2BE29E] border-t-transparent rounded-full animate-spin mx-auto" />
                           <p className="text-sm font-bold text-white">Starting Camera Sensor...</p>
-                          <p className="text-xs text-stone-300">Connecting to device camera stream</p>
+                          <p className="text-xs text-[#6DAA8E]">Connecting to device camera stream</p>
                         </>
                       ) : (
                         <>
                           <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
-                          <p className="text-xs sm:text-sm text-stone-200 max-w-sm">
+                          <p className="text-xs sm:text-sm text-[#A1D2BC] max-w-sm">
                             {cameraError || 'Camera stream is blocked or unavailable in this window.'}
                           </p>
                           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                             <button
                               type="button"
                               onClick={() => startCamera(facingMode)}
-                              className="px-3.5 py-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              className="px-3.5 py-2 rounded-lg bg-[#0E281E] hover:bg-[#143B2C] border border-[#1C4D3A] text-[#2BE29E] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                               <span>Retry Stream</span>
@@ -576,8 +577,8 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                   {cameraActive && (
                     <>
                       <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between pointer-events-auto z-10">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F4F9F4]/95 backdrop-blur-md border border-emerald-400 text-emerald-950 text-[11px] font-bold">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#071610]/90 backdrop-blur-md border border-[#2BE29E]/40 text-[#2BE29E] text-[11px] font-bold">
+                          <span className="w-2 h-2 rounded-full bg-[#2BE29E] animate-pulse" />
                           <span>OBJECT SENSOR ({facingMode === 'environment' ? 'REAR' : 'FRONT'})</span>
                         </div>
 
@@ -586,29 +587,29 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                             type="button"
                             onClick={toggleFacingMode}
                             title="Flip Camera (Front/Rear)"
-                            className="px-2.5 py-1.5 rounded-lg bg-[#F4F9F4]/95 backdrop-blur-md border border-[#BCD8C3] hover:border-emerald-600 text-[#143823] text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-[#091B14]/90 backdrop-blur-md border border-[#1C4D3A] hover:border-[#2BE29E] text-white text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
                           >
-                            <SwitchCamera className="w-3.5 h-3.5 text-emerald-700" />
+                            <SwitchCamera className="w-3.5 h-3.5 text-[#2BE29E]" />
                             <span>Flip</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => nativeCameraInputRef.current?.click()}
                             title="Take Photo with Device Camera"
-                            className="px-2.5 py-1.5 rounded-lg bg-[#F4F9F4]/95 backdrop-blur-md border border-[#BCD8C3] hover:border-emerald-600 text-[#143823] text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-[#091B14]/90 backdrop-blur-md border border-[#1C4D3A] hover:border-[#2BE29E] text-white text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
                           >
-                            <Smartphone className="w-3.5 h-3.5 text-emerald-700" />
+                            <Smartphone className="w-3.5 h-3.5 text-[#2BE29E]" />
                             <span>Phone App</span>
                           </button>
                         </div>
                       </div>
 
-                      <div className="absolute inset-0 pointer-events-none border-2 border-emerald-400/30 m-6 rounded-lg flex items-center justify-center">
-                        <div className="w-14 h-14 border-2 border-dashed border-emerald-400/60 rounded-full flex items-center justify-center">
-                          <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping" />
+                      <div className="absolute inset-0 pointer-events-none border-2 border-[#2BE29E]/30 m-6 rounded-lg flex items-center justify-center">
+                        <div className="w-14 h-14 border-2 border-dashed border-[#2BE29E]/60 rounded-full flex items-center justify-center">
+                          <div className="w-2.5 h-2.5 bg-[#2BE29E] rounded-full animate-ping" />
                         </div>
-                        <div className="absolute bottom-2 text-[10px] uppercase font-bold tracking-wider text-white bg-black/60 px-2 py-0.5 rounded">
-                          Center Physical Object
+                        <div className="absolute bottom-2 text-[10px] uppercase font-bold tracking-wider text-white bg-black/75 border border-white/10 px-2.5 py-0.5 rounded">
+                          Point at Any Object
                         </div>
                       </div>
                     </>
@@ -621,22 +622,22 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                     type="button"
                     onClick={handleCapturePhoto}
                     disabled={!cameraActive}
-                    className={`py-3.5 px-4 rounded-xl text-white font-black text-sm flex items-center justify-center gap-2 shadow-md transition-all ${
+                    className={`py-3.5 px-4 rounded-xl text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${
                       cameraActive
-                        ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-700/20 active:scale-98 cursor-pointer'
-                        : 'bg-[#DFEFE2] text-stone-400 cursor-not-allowed border border-[#BCD8C3]'
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 active:scale-98 cursor-pointer shadow-emerald-900/40'
+                        : 'bg-[#0E281E] text-stone-500 cursor-not-allowed border border-[#184635]'
                     }`}
                   >
-                    <Camera className="w-5 h-5 text-emerald-100" />
-                    <span>CAPTURE SNAPSHOT</span>
+                    <Camera className="w-5 h-5" />
+                    <span>TAKE PHOTO</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => nativeCameraInputRef.current?.click()}
-                    className="py-3.5 px-4 rounded-xl bg-[#E8F2EA] hover:bg-[#DFEDE2] border border-[#BCD8C3] hover:border-emerald-600 text-[#143823] font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
+                    className="py-3.5 px-4 rounded-xl bg-[#0E281E] hover:bg-[#143B2C] border border-[#1C4D3A] hover:border-[#2BE29E] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
                   >
-                    <Smartphone className="w-5 h-5 text-emerald-700" />
+                    <Smartphone className="w-5 h-5 text-[#2BE29E]" />
                     <span>USE PHONE CAMERA APP</span>
                   </button>
                 </div>
@@ -646,10 +647,10 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
             {/* Upload View */}
             {activeInputTab === 'upload' && !capturedPhoto && (
               <div className="space-y-3">
-                <label className="flex flex-col items-center justify-center aspect-video rounded-xl border-2 border-dashed border-[#BCD8C3] hover:border-emerald-600 bg-[#E8F2EA] cursor-pointer p-6 transition-colors">
-                  <Upload className="w-10 h-10 text-emerald-700 mb-2" />
-                  <span className="text-sm font-bold text-[#143823]">Click or Drag & Drop Any Object Photo</span>
-                  <span className="text-xs text-[#4D6957] mt-1">Accepts JPG, PNG, WEBP from your phone or device</span>
+                <label className="flex flex-col items-center justify-center aspect-video rounded-xl border-2 border-dashed border-[#1C4D3A] hover:border-[#2BE29E] bg-[#091B14] cursor-pointer p-6 transition-colors">
+                  <Upload className="w-10 h-10 text-[#2BE29E] mb-2" />
+                  <span className="text-sm font-bold text-white">Click or Drag & Drop Any Object Photo</span>
+                  <span className="text-xs text-[#6DAA8E] mt-1">Accepts JPG, PNG, WEBP from your phone or device</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -663,22 +664,22 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
             {/* Presets Grid */}
             {activeInputTab === 'presets' && !capturedPhoto && (
               <div className="space-y-2">
-                <p className="text-xs text-[#4D6957]">
-                  Select an everyday real-world object to analyze:
+                <p className="text-xs text-[#6DAA8E]">
+                  Choose any everyday object to test right now:
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
                   {OBJECT_PRESETS.map((preset) => (
                     <button
                       key={preset.id}
                       onClick={() => handleSelectPreset(preset)}
-                      className="p-3 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3] hover:border-emerald-600 text-left transition-all hover:scale-[1.02] flex items-center gap-2.5 group shadow-xs cursor-pointer"
+                      className="p-3 rounded-xl bg-[#091B14] border border-[#143B2C] hover:border-[#2BE29E] text-left transition-all hover:scale-[1.02] flex items-center gap-2.5 group shadow-xs cursor-pointer"
                     >
                       <span className="text-2xl">{preset.icon}</span>
                       <div className="overflow-hidden">
-                        <div className="text-xs font-bold text-[#143823] truncate group-hover:text-emerald-700">
+                        <div className="text-xs font-bold text-white truncate group-hover:text-[#2BE29E]">
                           {preset.name}
                         </div>
-                        <div className="text-[10px] text-[#587563] truncate">
+                        <div className="text-[10px] text-[#6DAA8E] truncate">
                           {preset.category}
                         </div>
                       </div>
@@ -688,13 +689,13 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
               </div>
             )}
 
-            {/* AI Object Analysis 2.0 In-Progress Card */}
+            {/* AI Object Analysis In-Progress Card */}
             {isAnalyzing && (
-              <div className="p-6 rounded-xl bg-[#E8F2EA] border border-emerald-300 text-center space-y-3 animate-fadeIn">
-                <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
+              <div className="p-8 rounded-2xl bg-[#091B14] border border-[#184635] text-center space-y-4 animate-fadeIn">
+                <div className="w-10 h-10 border-4 border-[#2BE29E] border-t-transparent rounded-full animate-spin mx-auto" />
                 <div className="space-y-1">
-                  <div className="text-sm font-black text-[#143823]">AI OBJECT RECOGNITION 2.0</div>
-                  <div className="text-xs text-emerald-800 font-mono font-medium">{analysisStatus}</div>
+                  <div className="text-sm font-black text-white tracking-wider">AI OBJECT RECOGNITION</div>
+                  <div className="text-xs text-[#2BE29E] font-mono font-medium">{analysisStatus}</div>
                 </div>
               </div>
             )}
@@ -706,8 +707,8 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
               <div className="space-y-4 animate-fadeIn">
                 
                 {/* Photo & Identity Banner */}
-                <div className="p-3.5 sm:p-4 rounded-xl bg-[#E8F2EA] border border-[#BCD8C3] flex flex-col sm:flex-row gap-3.5 items-start">
-                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-lg overflow-hidden shrink-0 border border-[#BCD8C3] bg-stone-900">
+                <div className="p-3.5 sm:p-4 rounded-xl bg-[#091B14] border border-[#143B2C] flex flex-col sm:flex-row gap-3.5 items-start">
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-lg overflow-hidden shrink-0 border border-[#184635] bg-[#071610]">
                     <img src={capturedPhoto} alt="Analyzed" className="w-full h-full object-cover" />
                     <button
                       onClick={() => {
@@ -715,7 +716,7 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                         setStagedCreature(null);
                         if (activeInputTab === 'camera') startCamera(facingMode);
                       }}
-                      className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/75 text-[10px] font-bold text-white flex items-center gap-1 hover:bg-black transition-colors"
+                      className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/75 text-[10px] font-bold text-white flex items-center gap-1 hover:bg-black transition-colors cursor-pointer"
                     >
                       <RefreshCw className="w-2.5 h-2.5" /> Retake
                     </button>
@@ -723,42 +724,38 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
 
                   <div className="space-y-2 flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-700 text-white text-[10px] font-black uppercase">
-                        AI Recognised
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase">
+                        Recognized
                       </span>
                       {stagedCreature.objectDna?.objectIdentity?.recognitionConfidence !== undefined && (
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          stagedCreature.objectDna.objectIdentity.recognitionConfidence >= 0.8
-                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                            : 'bg-amber-100 text-amber-900 border-amber-300'
-                        }`}>
-                          {Math.round(stagedCreature.objectDna.objectIdentity.recognitionConfidence * 100)}% Confidence
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-[#0E281E] text-[#2BE29E] border-[#2BE29E]/40">
+                          {Math.round(stagedCreature.objectDna.objectIdentity.recognitionConfidence * 100)}% Match
                         </span>
                       )}
-                      <span className="text-[11px] font-bold text-[#587563]">
+                      <span className="text-[11px] font-bold text-[#6DAA8E]">
                         {stagedCreature.objectDna?.objectIdentity?.objectCategory || 'Physical Artifact'}
                       </span>
                     </div>
 
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-[#587563] block">
-                        Detected Physical Object (Editable)
+                      <label className="text-[10px] uppercase font-bold text-[#6DAA8E] block">
+                        Detected Object (Tap to edit)
                       </label>
                       <div className="flex items-center gap-2 mt-0.5">
                         <input
                           type="text"
                           value={customObjectName}
                           onChange={(e) => setCustomObjectName(e.target.value)}
-                          className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#F4F9F4] border border-[#BCD8C3] text-sm font-black text-[#143823] focus:outline-none focus:border-emerald-600"
+                          className="flex-1 px-3 py-1.5 rounded-lg bg-[#071610] border border-[#1C4D3A] text-sm font-black text-white focus:outline-none focus:border-[#2BE29E]"
                         />
                         <button
                           type="button"
                           onClick={() => analyzeCapturedImage(capturedPhoto, customObjectName)}
                           title="Re-analyze with updated hint"
-                          className="px-2.5 py-1.5 rounded-lg bg-[#DFEFE2] hover:bg-[#BCD8C3] text-xs font-bold text-[#143823] flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-2.5 py-1.5 rounded-lg bg-[#0E281E] hover:bg-[#143B2C] border border-[#1C4D3A] text-xs font-bold text-[#2BE29E] flex items-center gap-1 transition-colors cursor-pointer"
                         >
                           <RefreshCw className="w-3 h-3" />
-                          <span className="hidden sm:inline">Re-Scan</span>
+                          <span className="hidden sm:inline">Update</span>
                         </button>
                       </div>
                     </div>
@@ -766,7 +763,7 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                     {/* Alternative Interpretations Chips */}
                     {stagedCreature.objectDna?.objectIdentity?.alternativeInterpretations && stagedCreature.objectDna.objectIdentity.alternativeInterpretations.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <span className="text-[10px] text-[#587563] font-bold">Alternatives:</span>
+                        <span className="text-[10px] text-[#6DAA8E] font-bold">Suggestions:</span>
                         {stagedCreature.objectDna.objectIdentity.alternativeInterpretations.map((alt, i) => (
                           <button
                             key={i}
@@ -774,7 +771,7 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                               setCustomObjectName(alt);
                               analyzeCapturedImage(capturedPhoto, alt);
                             }}
-                            className="px-2 py-0.5 rounded-md bg-[#F4F9F4] border border-[#CFE2D3] hover:border-emerald-600 text-[10px] font-medium text-[#143823] transition-colors cursor-pointer"
+                            className="px-2 py-0.5 rounded-md bg-[#0E281E] border border-[#1C4D3A] hover:border-[#2BE29E] text-[10px] font-medium text-white transition-colors cursor-pointer"
                           >
                             {alt}
                           </button>
@@ -786,128 +783,42 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
 
                 {/* Physical Matter & Material Properties Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div className="p-2 rounded-lg bg-[#E8F2EA] border border-[#CFE2D3] text-center">
-                    <div className="text-[10px] uppercase font-bold text-[#587563]">Material</div>
-                    <div className="text-xs font-black text-[#143823] truncate">
+                  <div className="p-2 rounded-lg bg-[#091B14] border border-[#143B2C] text-center">
+                    <div className="text-[10px] uppercase font-bold text-[#6DAA8E]">Material</div>
+                    <div className="text-xs font-black text-white truncate">
                       {stagedCreature.objectDna?.physicalIdentity?.materialCandidates?.[0] || stagedCreature.materialPhysics?.materialName || 'Polymer Alloy'}
                     </div>
                   </div>
 
-                  <div className="p-2 rounded-lg bg-[#E8F2EA] border border-[#CFE2D3] text-center">
-                    <div className="text-[10px] uppercase font-bold text-[#587563]">Scale Tier</div>
-                    <div className="text-xs font-black text-emerald-800 uppercase">
+                  <div className="p-2 rounded-lg bg-[#091B14] border border-[#143B2C] text-center">
+                    <div className="text-[10px] uppercase font-bold text-[#6DAA8E]">Size Class</div>
+                    <div className="text-xs font-black text-[#2BE29E] uppercase">
                       {stagedCreature.objectDna?.physicalIdentity?.estimatedSizeClass || stagedCreature.objectComplexity?.scaleTier || 'Medium'}
                     </div>
                   </div>
 
-                  <div className="p-2 rounded-lg bg-[#E8F2EA] border border-[#CFE2D3] text-center">
-                    <div className="text-[10px] uppercase font-bold text-[#587563]">Rigidity</div>
-                    <div className="text-xs font-black text-[#143823] capitalize">
+                  <div className="p-2 rounded-lg bg-[#091B14] border border-[#143B2C] text-center">
+                    <div className="text-[10px] uppercase font-bold text-[#6DAA8E]">Rigidity</div>
+                    <div className="text-xs font-black text-white capitalize">
                       {stagedCreature.objectDna?.physicalIdentity?.rigidity || 'semi-rigid'}
                     </div>
                   </div>
 
-                  <div className="p-2 rounded-lg bg-[#E8F2EA] border border-[#CFE2D3] text-center">
-                    <div className="text-[10px] uppercase font-bold text-[#587563]">Combat Class</div>
-                    <div className="text-xs font-black text-emerald-800">
+                  <div className="p-2 rounded-lg bg-[#091B14] border border-[#143B2C] text-center">
+                    <div className="text-[10px] uppercase font-bold text-[#6DAA8E]">Combat Role</div>
+                    <div className="text-xs font-black text-[#2BE29E]">
                       {stagedCreature.objectDna?.gameplayIdentity?.suggestedClass || stagedCreature.robotClass || 'Warrior'}
                     </div>
                   </div>
                 </div>
 
-                {/* Signature Features Detected */}
-                {((stagedCreature.objectDna?.signatureFeatures && stagedCreature.objectDna.signatureFeatures.length > 0) ||
-                  (stagedCreature.objectDna?.visualFingerprint?.signatureFeatures && stagedCreature.objectDna.visualFingerprint.signatureFeatures.length > 0)) && (
-                  <div className="p-3 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3] space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#143823]">
-                      <Focus className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Signature Visual Features Detected</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(stagedCreature.objectDna?.signatureFeatures || stagedCreature.objectDna?.visualFingerprint?.signatureFeatures || []).map((feat, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded-md bg-[#F4F9F4] border border-emerald-300 text-[11px] font-medium text-emerald-950 flex items-center gap-1">
-                          <Check className="w-3 h-3 text-emerald-600" />
-                          <span>{feat}</span>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Gameplay Consequence Buffs */}
-                {stagedCreature.objectDna?.gameplayIdentity?.propertyConsequences && stagedCreature.objectDna.gameplayIdentity.propertyConsequences.length > 0 && (
-                  <div className="p-2.5 rounded-lg bg-[#E8F2EA] border border-[#CFE2D3] space-y-1">
-                    <div className="text-[10px] uppercase font-bold text-emerald-900 flex items-center gap-1">
-                      <Shield className="w-3 h-3 text-emerald-700" />
-                      <span>Physical Property Consequences:</span>
-                    </div>
-                    <div className="text-xs text-[#4D6957]">
-                      {stagedCreature.objectDna.gameplayIdentity.propertyConsequences.map(pc => `${pc.property}: ${pc.effect}`).join(" • ")}
-                    </div>
-                  </div>
-                )}
-
-                {/* Visual Transmutation Blueprint Preview */}
-                {(() => {
-                  const stagedVt = stagedCreature.visualTransmutation || stagedCreature.objectDna?.visualTransmutation || stagedCreature.visualParams?.visualTransmutation;
-                  if (!stagedVt) return null;
-                  return (
-                    <div className="p-3.5 rounded-xl bg-[#E8F2EA] border border-emerald-300/80 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs font-black text-[#143823]">
-                          <Box className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>Visual Transmutation 2.0 Blueprint</span>
-                        </div>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#F4F9F4] border border-emerald-300 text-emerald-900 font-bold uppercase">
-                          {stagedVt.silhouette.replace('_', ' ')}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center text-xs">
-                        <div className="p-1.5 rounded bg-[#F4F9F4] border border-[#CFE2D3]">
-                          <span className="text-[10px] uppercase font-bold text-[#587563] block">Chassis Silhouette</span>
-                          <span className="font-bold text-[#143823] capitalize truncate block">{stagedVt.silhouette.replace('_', ' ')}</span>
-                        </div>
-                        <div className="p-1.5 rounded bg-[#F4F9F4] border border-[#CFE2D3]">
-                          <span className="text-[10px] uppercase font-bold text-[#587563] block">PBR Surface Finish</span>
-                          <span className="font-bold text-[#143823] capitalize truncate block">{stagedVt.surfaceMaterial}</span>
-                        </div>
-                        <div className="p-1.5 rounded bg-[#F4F9F4] border border-[#CFE2D3] col-span-2 sm:col-span-1">
-                          <span className="text-[10px] uppercase font-bold text-[#587563] block">Metallic / Roughness</span>
-                          <span className="font-bold text-[#143823] font-mono">
-                            {Math.round(stagedVt.metallic * 100)}% / {Math.round(stagedVt.roughness * 100)}%
-                          </span>
-                        </div>
-                      </div>
-
-                      {stagedVt.transmutationMappings && stagedVt.transmutationMappings.length > 0 && (
-                        <div className="space-y-1 pt-1">
-                          <div className="text-[10px] uppercase font-bold text-[#587563]">Planned Geometry Transmutations:</div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                            {stagedVt.transmutationMappings.slice(0, 4).map((m, idx) => (
-                              <div key={idx} className="p-1.5 rounded-lg bg-[#F4F9F4] border border-[#BCD8C3] text-[10px] flex items-center justify-between">
-                                <span className="font-medium text-[#143823] truncate max-w-[46%]">{m.originalFeature}</span>
-                                <ArrowRight className="w-3 h-3 text-emerald-600 shrink-0 mx-1" />
-                                <span className="font-bold text-emerald-900 truncate max-w-[48%] text-right">{m.robotFeature}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Combat DNA 3.0: Physical Properties to Combat Mechanics Preview */}
-                <CombatDnaBlueprintView creature={stagedCreature} variant="compact" />
-
                 {/* Final Trigger Transformation CTA */}
                 <button
                   onClick={confirmTransformation}
-                  className="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-emerald-700/25 active:scale-98 transition-all cursor-pointer"
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-base flex items-center justify-center gap-2 shadow-xl shadow-emerald-900/40 active:scale-98 transition-all cursor-pointer"
                 >
                   <Sparkles className="w-5 h-5 text-white" />
-                  <span>TRANSFORM INTO 3D BATTLE ROBOT</span>
+                  <span>FORGE INTO 3D BATTLE ROBOT</span>
                 </button>
               </div>
             )}
@@ -918,112 +829,97 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
         {isMorphing && (
           <div className="py-12 flex flex-col items-center justify-center space-y-5 text-center">
             <div className="relative w-24 h-24">
-              <div className="absolute inset-0 rounded-full border-4 border-emerald-600/30 border-t-emerald-600 animate-spin" />
-              <div className="absolute inset-3 rounded-full border-4 border-amber-600/30 border-b-amber-600 animate-spin [animation-direction:reverse]" />
+              <div className="absolute inset-0 rounded-full border-4 border-[#2BE29E]/30 border-t-[#2BE29E] animate-spin" />
+              <div className="absolute inset-3 rounded-full border-4 border-amber-400/30 border-b-amber-400 animate-spin [animation-direction:reverse]" />
               <div className="absolute inset-0 flex items-center justify-center text-3xl animate-pulse">
                 ⚡
               </div>
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-lg font-black font-heading text-[#143823]">
-                ROBOT TRANSFORMATION IN PROGRESS
+              <h3 className="text-xl font-black font-heading text-white">
+                CREATING YOUR 3D ROBOT
               </h3>
-              <p className="text-xs text-emerald-800 font-mono font-bold animate-pulse">
+              <p className="text-xs text-[#2BE29E] font-mono font-bold animate-pulse">
                 {morphStep}
               </p>
             </div>
 
-            <div className="flex items-center gap-2 text-[11px] text-[#587563]">
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>Synthesizing Object DNA via Gemini Multimodal AI</span>
+            <div className="flex items-center gap-2 text-[11px] text-[#6DAA8E]">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Synthesizing Object DNA & 3D Combat Model...</span>
             </div>
           </div>
         )}
 
         {/* Phase 3: Creature Reveal & 3D Interactive Inspection */}
         {generatedCreature && !isMorphing && (
-          <div className="space-y-5 animate-fadeIn">
+          <div className="space-y-4 animate-fadeIn">
             
-            {/* Creature Identity Header */}
-            <div className="p-4 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3] space-y-2.5">
+            {/* Robot Identity Header */}
+            <div className="p-4 rounded-xl bg-[#091B14] border border-[#143B2C] space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   {generatedCreature.faction && (
                     <span className={`px-2.5 py-0.5 rounded-md text-xs font-black uppercase border ${
                       generatedCreature.faction === 'Decepticon' 
-                        ? 'bg-purple-100 border-purple-300 text-purple-900' 
-                        : 'bg-red-100 border-red-300 text-red-900'
+                        ? 'bg-purple-950/80 border-purple-600/50 text-purple-300' 
+                        : 'bg-red-950/80 border-red-600/50 text-red-300'
                     }`}>
                       {generatedCreature.faction === 'Decepticon' ? '⚔️ DECEPTICON' : '🛡️ AUTOBOT'}
                     </span>
                   )}
                   {generatedCreature.robotClass && (
-                    <span className="px-2 py-0.5 rounded-md bg-[#F4F9F4] border border-[#BCD8C3] text-[#143823] text-xs font-black uppercase">
+                    <span className="px-2 py-0.5 rounded-md bg-[#0E281E] border border-[#1C4D3A] text-[#2BE29E] text-xs font-black uppercase">
                       {generatedCreature.robotClass}
                     </span>
                   )}
-                  <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 border border-emerald-300 text-emerald-900 font-black text-xs uppercase">
+                  <span className="px-2 py-0.5 rounded-md bg-[#0E281E] border border-amber-500/40 text-amber-400 font-black text-xs uppercase">
                     {generatedCreature.rarity}
                   </span>
                   {getElementBadge(generatedCreature.element)}
                 </div>
 
-                <span className="text-[11px] font-bold text-emerald-900 font-mono bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-emerald-600" />
-                  <span>VISUAL TRANSMUTATION 2.0</span>
+                <span className="text-[11px] font-bold text-[#2BE29E] font-mono bg-[#0E281E] px-2.5 py-0.5 rounded-full border border-[#2BE29E]/30 flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>3D BATTLE READY</span>
                 </span>
               </div>
 
               <div>
-                <h3 className="text-2xl font-black font-heading text-[#143823]">
+                <h3 className="text-2xl sm:text-3xl font-black font-heading text-white tracking-wide">
                   {generatedCreature.name}
                 </h3>
-                <p className="text-xs text-emerald-800 font-medium">
-                  Transformed from: <strong>{generatedCreature.originalObject}</strong>
+                <p className="text-xs text-[#6DAA8E] font-medium mt-0.5">
+                  Forged from: <strong className="text-white">{generatedCreature.originalObject}</strong>
                 </p>
-                <p className="text-xs text-[#4D6957] italic mt-1 line-clamp-2">
+                <p className="text-xs text-[#A1D2BC] italic mt-1 line-clamp-2">
                   "{generatedCreature.lore}"
                 </p>
               </div>
             </div>
 
-            {/* Visual Transmutation 2.0: Side-by-Side Causal Lineage */}
+            {/* Split Visual Viewport: Scanned Physical Object + 3D Interactive Robot */}
             {(() => {
               const vt = generatedCreature.visualTransmutation || generatedCreature.objectDna?.visualTransmutation || generatedCreature.visualParams?.visualTransmutation;
               return (
-                <div className="p-4 rounded-xl bg-[#E8F2EA] border border-emerald-300/90 space-y-3 shadow-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-xs font-black uppercase tracking-wider text-emerald-950 font-mono">
-                        Visual Lineage Comparison
-                      </span>
-                    </div>
-                    {vt?.silhouette && (
-                      <span className="text-[10px] font-bold text-emerald-900 font-mono bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 uppercase">
-                        {vt.silhouette.replace('_', ' ')} CHASSIS
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Split Visual Viewport */}
+                <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch">
                     {/* Real Physical Object Card */}
-                    <div className="relative rounded-xl border border-[#BCD8C3] bg-stone-900 overflow-hidden flex flex-col justify-between min-h-[220px]">
+                    <div className="relative rounded-xl border border-[#184635] bg-[#071610] overflow-hidden flex flex-col justify-between min-h-[220px]">
                       {capturedPhoto ? (
                         <img src={capturedPhoto} alt={generatedCreature.originalObject} className="absolute inset-0 w-full h-full object-cover" />
                       ) : (
                         <div className="flex-1 flex items-center justify-center text-stone-500 text-xs">Physical Image Source</div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/50 pointer-events-none" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#071610] via-black/30 to-black/60 pointer-events-none" />
                       
                       <div className="relative z-10 p-2.5 flex items-center justify-between">
-                        <span className="px-2 py-0.5 rounded bg-black/75 backdrop-blur-xs text-white text-[10px] font-bold border border-white/20">
+                        <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-xs text-white text-[10px] font-bold border border-white/20">
                           SCANNED OBJECT
                         </span>
                         <span className="px-2 py-0.5 rounded bg-emerald-600/90 text-white text-[10px] font-black uppercase tracking-wider">
-                          ORIGIN
+                          SOURCE
                         </span>
                       </div>
 
@@ -1031,10 +927,9 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                         <div className="text-sm font-black text-white drop-shadow-sm truncate">
                           {generatedCreature.originalObject}
                         </div>
-                        {/* Signature Visual Features Found */}
                         <div className="flex flex-wrap gap-1">
                           {(vt?.signatureFeatures || generatedCreature.objectDna?.signatureFeatures || [generatedCreature.objectFeature]).slice(0, 3).map((feat, i) => (
-                            <span key={i} className="px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[9px] font-medium text-emerald-300 border border-emerald-400/40">
+                            <span key={i} className="px-1.5 py-0.5 rounded bg-[#071610]/80 backdrop-blur-xs text-[9px] font-medium text-[#2BE29E] border border-[#2BE29E]/30">
                               {feat}
                             </span>
                           ))}
@@ -1043,246 +938,206 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                     </div>
 
                     {/* 3D Battle Mech Viewport */}
-                    <div className="relative rounded-xl border border-emerald-300/80 bg-gradient-to-b from-[#E0EFE3] to-[#CFE5D3] overflow-hidden flex flex-col justify-between min-h-[220px]">
+                    <div className="relative rounded-xl border border-[#1C4D3A] hover:border-[#2BE29E]/60 bg-gradient-to-b from-[#0B231A] to-[#06140D] overflow-hidden flex flex-col justify-between min-h-[220px]">
                       <div ref={previewCanvasRef} className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing" />
                       
                       <div className="relative z-10 p-2.5 flex items-center justify-between pointer-events-none">
-                        <span className="px-2 py-0.5 rounded bg-emerald-950/80 backdrop-blur-xs text-emerald-100 text-[10px] font-bold border border-emerald-500/30">
-                          CYBERTRONIAN MECH
+                        <span className="px-2 py-0.5 rounded bg-[#071610]/90 backdrop-blur-xs text-[#2BE29E] text-[10px] font-bold border border-[#2BE29E]/40">
+                          3D ROBOT PREVIEW
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider">
-                          LIVE 3D
+                        <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider">
+                          INTERACTIVE
                         </span>
                       </div>
 
-                      <div className="relative z-10 p-2.5 space-y-0.5 pointer-events-none bg-gradient-to-t from-[#E8F2EA]/95 via-[#E8F2EA]/70 to-transparent">
-                        <div className="text-sm font-black text-[#143823] truncate">
+                      <div className="relative z-10 p-2.5 space-y-0.5 pointer-events-none bg-gradient-to-t from-[#06140D] via-[#06140D]/80 to-transparent">
+                        <div className="text-sm font-black text-white truncate">
                           {generatedCreature.name}
                         </div>
-                        <div className="text-[10px] text-emerald-800 font-medium flex items-center gap-1">
-                          <Eye className="w-3 h-3 text-emerald-600" />
-                          <span>360° Real-Time View (Drag to rotate)</span>
+                        <div className="text-[10px] text-[#2BE29E] font-medium flex items-center gap-1">
+                          <Eye className="w-3 h-3 text-[#2BE29E]" />
+                          <span>Drag to rotate in 360°</span>
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  {/* Detailed Visual Transmutation Blueprint */}
-                  {vt && (
-                    <div className="p-3 rounded-lg bg-[#F4F9F4] border border-[#BCD8C3] space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-bold text-emerald-950 flex items-center gap-1">
-                          <Box className="w-3 h-3 text-emerald-700" />
-                          <span>Transmutation Blueprint & Lineage:</span>
-                        </span>
-                        <span className="text-[10px] text-[#4D6957] font-mono">
-                          Proportions: W:{vt.bodyProportions?.width || 1} • H:{vt.bodyProportions?.height || 1} • D:{vt.bodyProportions?.depth || 1}
-                        </span>
-                      </div>
-
-                      {/* Physical PBR & Silhouette properties */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
-                        <div className="p-1.5 rounded bg-[#E8F2EA] border border-[#CFE2D3]">
-                          <span className="text-[9px] uppercase font-bold text-[#587563] block">Silhouette Armor</span>
-                          <span className="font-bold text-[#143823] capitalize truncate block">{vt.silhouette.replace('_', ' ')}</span>
-                        </div>
-                        <div className="p-1.5 rounded bg-[#E8F2EA] border border-[#CFE2D3]">
-                          <span className="text-[9px] uppercase font-bold text-[#587563] block">PBR Surface</span>
-                          <span className="font-bold text-[#143823] capitalize truncate block">{vt.surfaceMaterial}</span>
-                        </div>
-                        <div className="p-1.5 rounded bg-[#E8F2EA] border border-[#CFE2D3] col-span-2 sm:col-span-1">
-                          <span className="text-[9px] uppercase font-bold text-[#587563] block">Metallic / Roughness</span>
-                          <span className="font-bold text-[#143823] font-mono">
-                            {Math.round(vt.metallic * 100)}% / {Math.round(vt.roughness * 100)}%
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Feature Mappings Table */}
-                      {vt.transmutationMappings && vt.transmutationMappings.length > 0 && (
-                        <div className="space-y-1 pt-1">
-                          <div className="text-[9px] uppercase font-bold text-[#587563]">Physical-to-Mech Mechanical Mappings:</div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                            {vt.transmutationMappings.map((m, idx) => (
-                              <div key={idx} className="p-2 rounded-md bg-[#E8F2EA] border border-[#CFE2D3] text-[10px] space-y-0.5">
-                                <div className="flex items-center justify-between font-bold">
-                                  <span className="text-[#143823] truncate max-w-[46%]">{m.originalFeature}</span>
-                                  <ArrowRight className="w-2.5 h-2.5 text-emerald-600 shrink-0 mx-1" />
-                                  <span className="text-emerald-900 truncate max-w-[48%] text-right">{m.robotFeature}</span>
-                                </div>
-                                <div className="text-[9px] text-[#4D6957] italic truncate">
-                                  {m.visualEffect}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               );
             })()}
 
-            {/* Object DNA 2.0 Signature Features & Real-World Mass Tier Card */}
-            {generatedCreature.objectComplexity && (
-              <div className="p-3.5 rounded-xl bg-[#E8F2EA] border border-emerald-300/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex flex-col items-center justify-center font-black text-[10px] uppercase shadow-xs shrink-0">
-                    <span>{generatedCreature.objectComplexity.scaleTier === 'colossal' ? 'TITAN' :
-                           generatedCreature.objectComplexity.scaleTier === 'large' ? 'HEAVY' :
-                           generatedCreature.objectComplexity.scaleTier === 'micro' ? 'SCOUT' : 'WARRIOR'}</span>
-                    <span className="text-[8px] opacity-80">{generatedCreature.objectComplexity.scaleTier}</span>
-                  </div>
-                  <div>
-                    <div className="text-xs font-black text-[#14532D] flex items-center gap-1.5 flex-wrap">
-                      <span>{generatedCreature.objectComplexity.tierLabel}</span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">
-                        {generatedCreature.objectComplexity.statMultiplier}x Stat Multiplier
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-[#4D6957] mt-0.5">
-                      {generatedCreature.objectComplexity.physicalMassDesc} • Structural Complexity: <strong>{generatedCreature.objectComplexity.complexityScore}/100</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="self-end sm:self-auto text-right pl-2 border-t sm:border-t-0 sm:border-l border-[#CFE2D3] pt-1 sm:pt-0">
-                  <div className="text-[10px] uppercase font-bold text-[#587563]">Combat Power</div>
-                  <div className="text-base font-black text-emerald-900 font-mono">⚡ {generatedCreature.objectComplexity.powerRating}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Expedition Forge Scaling Breakdown (Prompt Sections 17 & 18) */}
-            {generatedCreature.explorationMetadata && (
-              <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-950 via-[#0A2616] to-[#041A0E] text-white border border-emerald-500/50 shadow-md space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-emerald-800/60">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-amber-400 text-amber-950 shadow-xs">
-                      <Compass className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-black uppercase tracking-wider text-amber-300">
-                        Expedition Forge Calibration
-                      </div>
-                      <h4 className="font-heading font-black text-sm text-white flex items-center gap-2">
-                        <span>{generatedCreature.explorationMetadata.scanTierLabel}</span>
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                          +{generatedCreature.explorationMetadata.scanPowerBonusPercent}% Potential Unlocked
-                        </span>
-                      </h4>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-emerald-400/80">Real-World Range</span>
-                    <div className="text-sm font-black font-mono text-white">{generatedCreature.explorationMetadata.distanceMeters}m</div>
-                  </div>
-                </div>
-
-                {/* Stat Buff Breakdown Badges */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-center">
-                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30">
-                    <div className="text-[9px] font-bold text-emerald-300">HP BOOST</div>
-                    <div className="text-xs font-black text-emerald-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.hpBuff}</div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30">
-                    <div className="text-[9px] font-bold text-amber-300">ATK BOOST</div>
-                    <div className="text-xs font-black text-amber-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.attackBuff}</div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30">
-                    <div className="text-[9px] font-bold text-blue-300">DEF BOOST</div>
-                    <div className="text-xs font-black text-blue-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.defenseBuff}</div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30">
-                    <div className="text-[9px] font-bold text-teal-300">SPD BOOST</div>
-                    <div className="text-xs font-black text-teal-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.speedBuff}</div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30 col-span-2 sm:col-span-1">
-                    <div className="text-[9px] font-bold text-purple-300">SPECIAL DMG</div>
-                    <div className="text-xs font-black text-purple-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.abilityDamageBuff}</div>
-                  </div>
-                </div>
-
-                {/* Object Trait Perk */}
-                {generatedCreature.explorationMetadata.perkApplied && (
-                  <div className="p-2 rounded-lg bg-emerald-900/50 border border-emerald-600/40 text-xs">
-                    <span className="font-bold text-amber-300">Signature Trait Perk: </span>
-                    <span className="font-semibold text-white">{generatedCreature.explorationMetadata.perkApplied.name}</span>
-                    <p className="text-[11px] text-emerald-200/90 mt-0.5">{generatedCreature.explorationMetadata.perkApplied.description}</p>
-                  </div>
-                )}
-
-                {/* Honest Causal AI Explanation */}
-                <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-800/40 text-[11px] text-emerald-300/90 font-mono leading-relaxed">
-                  <span className="font-bold text-amber-400 uppercase tracking-wider block text-[9px] mb-1">
-                    Deterministic Mechanics Trace:
-                  </span>
-                  {generatedCreature.explorationMetadata.causalExplanation}
-                </div>
-              </div>
-            )}
-
-            {/* Combat DNA 3.0: Full Physical Mechanics Derivation Blueprint */}
-            <CombatDnaBlueprintView creature={generatedCreature} variant="full" />
-
-            {/* Stats Matrix */}
+            {/* Core Stats Matrix (Child-Friendly & High Contrast: Health, Damage, Fire Rate, Special Power) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <div className="p-2.5 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3] text-center space-y-0.5">
-                <div className="text-[10px] uppercase font-bold text-[#4D6957] flex items-center justify-center gap-1">
-                  <Heart className="w-3.5 h-3.5 text-rose-600" />
-                  <span>HP</span>
+              <div className="p-3 rounded-xl bg-[#091B14] border border-[#143B2C] text-center space-y-0.5">
+                <div className="text-[11px] uppercase font-bold text-[#6DAA8E] flex items-center justify-center gap-1">
+                  <Heart className="w-3.5 h-3.5 text-rose-500" />
+                  <span>Health</span>
                 </div>
-                <div className="text-lg font-black text-[#143823]">{generatedCreature.stats.hp}</div>
+                <div className="text-xl font-black text-white font-mono">{generatedCreature.stats.hp}</div>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3] text-center space-y-0.5">
-                <div className="text-[10px] uppercase font-bold text-[#4D6957] flex items-center justify-center gap-1">
-                  <Swords className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Attack</span>
+              <div className="p-3 rounded-xl bg-[#091B14] border border-[#143B2C] text-center space-y-0.5">
+                <div className="text-[11px] uppercase font-bold text-[#6DAA8E] flex items-center justify-center gap-1">
+                  <Swords className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Damage</span>
                 </div>
-                <div className="text-lg font-black text-[#143823]">{generatedCreature.stats.attack}</div>
+                <div className="text-xl font-black text-white font-mono">{generatedCreature.stats.attack}</div>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3] text-center space-y-0.5">
-                <div className="text-[10px] uppercase font-bold text-[#4D6957] flex items-center justify-center gap-1">
-                  <Shield className="w-3.5 h-3.5 text-blue-600" />
+              <div className="p-3 rounded-xl bg-[#091B14] border border-[#143B2C] text-center space-y-0.5">
+                <div className="text-[11px] uppercase font-bold text-[#6DAA8E] flex items-center justify-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Fire Rate</span>
+                </div>
+                <div className="text-xl font-black text-white font-mono">
+                  {(1000 / (generatedCreature.combatDna?.baseCooldownMs || 600)).toFixed(1)}/s
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#091B14] border border-[#143B2C] text-center space-y-0.5">
+                <div className="text-[11px] uppercase font-bold text-[#6DAA8E] flex items-center justify-center gap-1">
+                  <Shield className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Defense</span>
                 </div>
-                <div className="text-lg font-black text-[#143823]">{generatedCreature.stats.defense}</div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3] text-center space-y-0.5">
-                <div className="text-[10px] uppercase font-bold text-[#4D6957] flex items-center justify-center gap-1">
-                  <Gauge className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Speed</span>
-                </div>
-                <div className="text-lg font-black text-[#143823]">{generatedCreature.stats.speed}</div>
+                <div className="text-xl font-black text-white font-mono">{generatedCreature.stats.defense}</div>
               </div>
             </div>
 
-            {/* Special Ability Card */}
-            <div className="p-3.5 rounded-xl bg-[#E8F2EA] border border-emerald-200 flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-emerald-700 text-white shrink-0 shadow-xs">
+            {/* Special Power Card */}
+            <div className="p-3.5 rounded-xl bg-[#091B14] border border-[#184635] flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-emerald-600 text-white shrink-0 shadow-xs">
                 <Zap className="w-5 h-5" />
               </div>
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-[#143823]">
-                    {generatedCreature.specialAbility.name}
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#F4F9F4] border border-emerald-200 text-emerald-900 font-mono">
-                    {generatedCreature.specialAbility.cooldown}s CD
-                  </span>
-                  <span className="text-[10px] text-amber-800 font-bold">
-                    {generatedCreature.specialAbility.damage} DMG
+              <div className="space-y-0.5 flex-1">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-white">
+                      {generatedCreature.specialAbility.name}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#071610] border border-[#1C4D3A] text-[#2BE29E] font-mono">
+                      {generatedCreature.specialAbility.cooldown}s CD
+                    </span>
+                  </div>
+                  <span className="text-xs text-amber-400 font-bold font-mono">
+                    ⚡ {generatedCreature.specialAbility.damage} DMG
                   </span>
                 </div>
-                <p className="text-xs text-[#4D6957]">
+                <p className="text-xs text-[#A1D2BC]">
                   {generatedCreature.specialAbility.description}
                 </p>
               </div>
             </div>
+
+            {/* Collapsible Tech Specs Toggle */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedSpecs(!showAdvancedSpecs)}
+                className="w-full py-2 px-3 rounded-lg bg-[#0E281E]/60 hover:bg-[#0E281E] border border-[#143B2C] text-xs font-bold text-[#6DAA8E] hover:text-[#2BE29E] flex items-center justify-between transition-colors cursor-pointer"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Box className="w-3.5 h-3.5 text-[#2BE29E]" />
+                  <span>Advanced Tech Specs & Blueprints</span>
+                </span>
+                <span className="text-[11px] font-mono">{showAdvancedSpecs ? '▲ Hide Specs' : '▼ Show Specs'}</span>
+              </button>
+            </div>
+
+            {/* Collapsible Advanced Details */}
+            {showAdvancedSpecs && (
+              <div className="space-y-3 pt-1 animate-fadeIn">
+                {/* Object Complexity / Mass Tier */}
+                {generatedCreature.objectComplexity && (
+                  <div className="p-3.5 rounded-xl bg-[#091B14] border border-[#184635] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex flex-col items-center justify-center font-black text-[10px] uppercase shadow-xs shrink-0">
+                        <span>{generatedCreature.objectComplexity.scaleTier === 'colossal' ? 'TITAN' :
+                               generatedCreature.objectComplexity.scaleTier === 'large' ? 'HEAVY' :
+                               generatedCreature.objectComplexity.scaleTier === 'micro' ? 'SCOUT' : 'WARRIOR'}</span>
+                        <span className="text-[8px] opacity-80">{generatedCreature.objectComplexity.scaleTier}</span>
+                      </div>
+                      <div>
+                        <div className="text-xs font-black text-white flex items-center gap-1.5 flex-wrap">
+                          <span>{generatedCreature.objectComplexity.tierLabel}</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#0E281E] text-[#2BE29E] font-bold border border-[#2BE29E]/40">
+                            {generatedCreature.objectComplexity.statMultiplier}x Multiplier
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-[#6DAA8E] mt-0.5">
+                          {generatedCreature.objectComplexity.physicalMassDesc} • Complexity: <strong className="text-white">{generatedCreature.objectComplexity.complexityScore}/100</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="self-end sm:self-auto text-right pl-2 border-t sm:border-t-0 sm:border-l border-[#143B2C] pt-1 sm:pt-0">
+                      <div className="text-[10px] uppercase font-bold text-[#6DAA8E]">Combat Power</div>
+                      <div className="text-base font-black text-[#2BE29E] font-mono">⚡ {generatedCreature.objectComplexity.powerRating}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Expedition Forge Scaling Breakdown */}
+                {generatedCreature.explorationMetadata && (
+                  <div className="p-4 rounded-xl bg-[#091B14] text-white border border-emerald-500/40 shadow-md space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-[#143B2C]">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-amber-400 text-amber-950 shadow-xs">
+                          <Compass className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                            Expedition Forge Calibration
+                          </div>
+                          <h4 className="font-heading font-black text-sm text-white flex items-center gap-2">
+                            <span>{generatedCreature.explorationMetadata.scanTierLabel}</span>
+                            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-[#2BE29E] border border-emerald-500/40">
+                              +{generatedCreature.explorationMetadata.scanPowerBonusPercent}% Bonus
+                            </span>
+                          </h4>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold text-[#6DAA8E]">Exploration Range</span>
+                        <div className="text-sm font-black font-mono text-white">{generatedCreature.explorationMetadata.distanceMeters}m</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-center">
+                      <div className="p-1.5 rounded-lg bg-white/5 border border-[#184635]">
+                        <div className="text-[9px] font-bold text-[#2BE29E]">HP BOOST</div>
+                        <div className="text-xs font-black text-white font-mono">+{generatedCreature.explorationMetadata.statBuffs.hpBuff}</div>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-white/5 border border-[#184635]">
+                        <div className="text-[9px] font-bold text-amber-300">ATK BOOST</div>
+                        <div className="text-xs font-black text-white font-mono">+{generatedCreature.explorationMetadata.statBuffs.attackBuff}</div>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-white/5 border border-[#184635]">
+                        <div className="text-[9px] font-bold text-blue-300">DEF BOOST</div>
+                        <div className="text-xs font-black text-white font-mono">+{generatedCreature.explorationMetadata.statBuffs.defenseBuff}</div>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-white/5 border border-[#184635]">
+                        <div className="text-[9px] font-bold text-teal-300">SPD BOOST</div>
+                        <div className="text-xs font-black text-white font-mono">+{generatedCreature.explorationMetadata.statBuffs.speedBuff}</div>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-white/5 border border-[#184635] col-span-2 sm:col-span-1">
+                        <div className="text-[9px] font-bold text-purple-300">SPECIAL DMG</div>
+                        <div className="text-xs font-black text-white font-mono">+{generatedCreature.explorationMetadata.statBuffs.abilityDamageBuff}</div>
+                      </div>
+                    </div>
+
+                    {generatedCreature.explorationMetadata.perkApplied && (
+                      <div className="p-2 rounded-lg bg-[#0E281E] border border-[#1C4D3A] text-xs">
+                        <span className="font-bold text-amber-300">Signature Trait Perk: </span>
+                        <span className="font-semibold text-white">{generatedCreature.explorationMetadata.perkApplied.name}</span>
+                        <p className="text-[11px] text-[#6DAA8E] mt-0.5">{generatedCreature.explorationMetadata.perkApplied.description}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Combat DNA Blueprint */}
+                <CombatDnaBlueprintView creature={generatedCreature} variant="full" />
+              </div>
+            )}
 
             {/* Battle Entry Actions */}
             <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-2">
@@ -1292,9 +1147,9 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                   setCapturedPhoto(null);
                   setStagedCreature(null);
                 }}
-                className="w-full sm:w-auto px-4 py-3 rounded-xl bg-[#E8F2EA] hover:bg-[#DFEDE2] border border-[#BCD8C3] text-[#143823] font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-[#0E281E] hover:bg-[#143B2C] border border-[#1C4D3A] hover:border-[#2BE29E] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className="w-3.5 h-3.5 text-[#2BE29E]" />
                 <span>Scan Another Object</span>
               </button>
 
@@ -1315,10 +1170,10 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                       };
                   onCreatureReady(finalCreature);
                 }}
-                className="w-full sm:flex-1 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20 active:scale-95 transition-all cursor-pointer"
+                className="w-full sm:flex-1 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-base flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-900/50 active:scale-95 transition-all cursor-pointer"
               >
-                <Play className="w-4 h-4 fill-white" />
-                <span>ENTER 3D BATTLE ARENA</span>
+                <Play className="w-5 h-5 fill-white" />
+                <span>USE THIS ROBOT</span>
               </button>
             </div>
           </div>

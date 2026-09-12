@@ -1,5 +1,5 @@
 {
-  "name": "Animatrix 3D: Object Creature Arena",
+  "name": "Matter-Born: Object Creature Arena",
   "description": "Mobile 3D battle arena with real-world GPS exploration, Live OpenStreetMap tracking, Gemini AI, and The Forge progression system. Physically explore outdoors to earn Exploration Points (EP), permanently forge combat upgrades, and battle 3D mechs.",
   "requestFramePermissions": ["camera", "microphone", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

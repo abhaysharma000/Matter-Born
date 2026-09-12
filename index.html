@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#EDF5EE" />
+    <meta name="theme-color" content="#0D281E" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Animatrix 3D" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Matter-Born" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <title>Animatrix 3D: Object Creature Arena</title>
+    <title>Matter-Born: Object Creature Arena</title>
     <meta name="description" content="Mobile 3D battle arena with real-world GPS exploration, Live OpenStreetMap tracking, Gemini AI, and The Forge progression system. Physically explore outdoors to earn Exploration Points (EP), permanently forge combat upgrades, and battle 3D mechs." />
-    <meta property="og:title" content="Animatrix 3D: Object Creature Arena" />
+    <meta property="og:title" content="Matter-Born: Object Creature Arena" />
     <meta property="og:description" content="Mobile 3D battle arena with real-world GPS exploration, Live OpenStreetMap tracking, Gemini AI, and The Forge progression system. Physically explore outdoors to earn Exploration Points (EP), permanently forge combat upgrades, and battle 3D mechs." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -21,8 +21,27 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      // Filter benign Vite HMR websocket messages in sandboxed preview iframe
+      (function() {
+        const origError = console.error;
+        console.error = function(...args) {
+          if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('[vite]')) {
+            return;
+          }
+          origError.apply(console, args);
+        };
+        const origWarn = console.warn;
+        console.warn = function(...args) {
+          if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('[vite]')) {
+            return;
+          }
+          origWarn.apply(console, args);
+        };
+      })();
+    </script>
   </head>
-  <body class="bg-[#EDF5EE] text-[#143823] font-sans antialiased overflow-x-hidden selection:bg-emerald-200 selection:text-emerald-950">
+  <body class="bg-[#0D281E] text-white font-sans antialiased overflow-x-hidden selection:bg-emerald-500/30 selection:text-emerald-200">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

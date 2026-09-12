@@ -32,10 +32,10 @@ interface ExplorationScreenProps {
 }
 
 const ADVENTURE_SUGGESTIONS = [
+  'Afternoon Park Walk',
+  'School Commute',
+  'Weekend Hike',
   'Robot Hunt',
-  'Campus Adventure',
-  'City Quest',
-  'Park Patrol',
 ];
 
 export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
@@ -59,7 +59,7 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
     getDiscoveryContext,
   } = useExplorationSession();
 
-  const [adventureInput, setAdventureInput] = useState('Robot Hunt');
+  const [adventureInput, setAdventureInput] = useState('Afternoon Park Walk');
   const [showDemoTools, setShowDemoTools] = useState(false);
   const [showUpgradesModal, setShowUpgradesModal] = useState(false);
 
@@ -524,7 +524,7 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
         {/* Safety Footer */}
         <div className="flex items-center gap-2 text-[11px] text-[#5A8E77] pt-2 border-t border-[#144433]">
           <ShieldCheck className="w-3.5 h-3.5 text-[#2BE29E] shrink-0" />
-          <span>Walk first. Stop safely before scanning. Stay alert to your surroundings.</span>
+          <span>Always watch your surroundings while exploring. Walk first, stop safely before scanning.</span>
         </div>
       </div>
 
