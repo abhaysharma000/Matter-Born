@@ -44,6 +44,7 @@ import { sound } from '../../utils/audio';
 import confetti from 'canvas-confetti';
 import { ExplorationDiscoveryContext } from '../../types/exploration';
 import { Compass, ShieldCheck } from 'lucide-react';
+import { applyExplorationPowerToCreature } from '../../utils/explorationPowerScaling';
 
 interface CreatureMorphModalProps {
   onCreatureReady: (creature: BattleCreature) => void;
@@ -309,8 +310,16 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
       } : undefined,
     };
 
+    const finalCreature = explorationContext
+      ? applyExplorationPowerToCreature(
+          updatedCreature,
+          explorationContext.distanceMeters,
+          explorationContext.expeditionId
+        )
+      : updatedCreature;
+
     setTimeout(() => {
-      setGeneratedCreature(updatedCreature);
+      setGeneratedCreature(finalCreature);
       setIsMorphing(false);
       confetti({ particleCount: 90, spread: 90, origin: { y: 0.6 } });
     }, 600);
@@ -1145,6 +1154,75 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
               </div>
             )}
 
+            {/* Expedition Forge Scaling Breakdown (Prompt Sections 17 & 18) */}
+            {generatedCreature.explorationMetadata && (
+              <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-950 via-[#0A2616] to-[#041A0E] text-white border border-emerald-500/50 shadow-md space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-emerald-800/60">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-amber-400 text-amber-950 shadow-xs">
+                      <Compass className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                        Expedition Forge Calibration
+                      </div>
+                      <h4 className="font-heading font-black text-sm text-white flex items-center gap-2">
+                        <span>{generatedCreature.explorationMetadata.scanTierLabel}</span>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          +{generatedCreature.explorationMetadata.scanPowerBonusPercent}% Potential Unlocked
+                        </span>
+                      </h4>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-emerald-400/80">Real-World Range</span>
+                    <div className="text-sm font-black font-mono text-white">{generatedCreature.explorationMetadata.distanceMeters}m</div>
+                  </div>
+                </div>
+
+                {/* Stat Buff Breakdown Badges */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-center">
+                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30">
+                    <div className="text-[9px] font-bold text-emerald-300">HP BOOST</div>
+                    <div className="text-xs font-black text-emerald-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.hpBuff}</div>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30">
+                    <div className="text-[9px] font-bold text-amber-300">ATK BOOST</div>
+                    <div className="text-xs font-black text-amber-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.attackBuff}</div>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30">
+                    <div className="text-[9px] font-bold text-blue-300">DEF BOOST</div>
+                    <div className="text-xs font-black text-blue-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.defenseBuff}</div>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30">
+                    <div className="text-[9px] font-bold text-teal-300">SPD BOOST</div>
+                    <div className="text-xs font-black text-teal-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.speedBuff}</div>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white/5 border border-emerald-700/30 col-span-2 sm:col-span-1">
+                    <div className="text-[9px] font-bold text-purple-300">SPECIAL DMG</div>
+                    <div className="text-xs font-black text-purple-400 font-mono">+{generatedCreature.explorationMetadata.statBuffs.abilityDamageBuff}</div>
+                  </div>
+                </div>
+
+                {/* Object Trait Perk */}
+                {generatedCreature.explorationMetadata.perkApplied && (
+                  <div className="p-2 rounded-lg bg-emerald-900/50 border border-emerald-600/40 text-xs">
+                    <span className="font-bold text-amber-300">Signature Trait Perk: </span>
+                    <span className="font-semibold text-white">{generatedCreature.explorationMetadata.perkApplied.name}</span>
+                    <p className="text-[11px] text-emerald-200/90 mt-0.5">{generatedCreature.explorationMetadata.perkApplied.description}</p>
+                  </div>
+                )}
+
+                {/* Honest Causal AI Explanation */}
+                <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-800/40 text-[11px] text-emerald-300/90 font-mono leading-relaxed">
+                  <span className="font-bold text-amber-400 uppercase tracking-wider block text-[9px] mb-1">
+                    Deterministic Mechanics Trace:
+                  </span>
+                  {generatedCreature.explorationMetadata.causalExplanation}
+                </div>
+              </div>
+            )}
+
             {/* Combat DNA 3.0: Full Physical Mechanics Derivation Blueprint */}
             <CombatDnaBlueprintView creature={generatedCreature} variant="full" />
 
@@ -1222,17 +1300,19 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
 
               <button
                 onClick={() => {
-                  const finalCreature: BattleCreature = {
-                    ...generatedCreature,
-                    ...(explorationContext
-                      ? {
-                          explorationDistanceMeters: explorationContext.distanceMeters,
-                          explorationTier: explorationContext.tier,
-                          explorationBonusTitle: explorationContext.bonusTitle,
-                          explorationBonusPerk: explorationContext.bonusDescription,
-                        }
-                      : {}),
-                  };
+                  const finalCreature: BattleCreature = generatedCreature.explorationMetadata
+                    ? generatedCreature
+                    : {
+                        ...generatedCreature,
+                        ...(explorationContext
+                          ? {
+                              explorationDistanceMeters: explorationContext.distanceMeters,
+                              explorationTier: explorationContext.tier,
+                              explorationBonusTitle: explorationContext.bonusTitle,
+                              explorationBonusPerk: explorationContext.bonusDescription,
+                            }
+                          : {}),
+                      };
                   onCreatureReady(finalCreature);
                 }}
                 className="w-full sm:flex-1 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20 active:scale-95 transition-all cursor-pointer"

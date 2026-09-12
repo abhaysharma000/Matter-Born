@@ -2,7 +2,6 @@ import React from 'react';
 import { 
   Scroll, 
   Clock, 
-  Coins, 
   Gem, 
   Check, 
   Gift, 
@@ -39,9 +38,8 @@ export const DailyQuestsModal: React.FC<DailyQuestsModalProps> = ({
     // Reward user
     const updatedUser = {
       ...user,
-      coins: user.coins + quest.rewardCoins,
       gems: user.gems + quest.rewardGems,
-      currentXp: Math.min(user.maxXp, user.currentXp + 120),
+      currentXp: Math.min(user.maxXp, user.currentXp + (quest.rewardCoins || 120)),
     };
     onUpdateUser(updatedUser);
 
@@ -87,12 +85,11 @@ export const DailyQuestsModal: React.FC<DailyQuestsModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 text-xs font-bold shrink-0">
-                    <span className="text-amber-700 flex items-center gap-0.5">
-                      <Coins className="w-3 h-3" />
-                      +{quest.rewardCoins}
+                    <span className="text-emerald-800 bg-emerald-100/70 border border-emerald-300/80 px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                      +{quest.rewardCoins > 0 ? quest.rewardCoins : 120} XP
                     </span>
                     {quest.rewardGems > 0 && (
-                      <span className="text-emerald-700 flex items-center gap-0.5">
+                      <span className="text-teal-700 flex items-center gap-0.5">
                         <Gem className="w-3 h-3" />
                         +{quest.rewardGems}
                       </span>

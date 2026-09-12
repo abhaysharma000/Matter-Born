@@ -104,7 +104,7 @@ export const HUD: React.FC<HUDProps> = ({ engine, onPauseToggle, isPaused }) => 
             <div className="flex justify-between items-baseline text-xs mb-1">
               <span className="text-slate-400 font-medium">Territory</span>
               <span className="font-extrabold text-sm text-emerald-400">
-                {territoryPercent.toFixed(1)}%
+                {(territoryPercent ?? 0).toFixed(1)}%
               </span>
             </div>
             <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
@@ -238,7 +238,7 @@ export const HUD: React.FC<HUDProps> = ({ engine, onPauseToggle, isPaused }) => 
                       entry.isPlayer ? 'text-amber-300' : 'text-slate-400'
                     }`}
                   >
-                    {entry.percentage.toFixed(1)}%
+                    {(entry?.percentage ?? 0).toFixed(1)}%
                   </span>
                 </div>
               ))}

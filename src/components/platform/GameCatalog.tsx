@@ -10,7 +10,8 @@ import {
   Sparkles,
   Crown,
   ChevronRight,
-  Compass
+  Compass,
+  Anvil
 } from 'lucide-react';
 import { BattleCreature } from '../../types/creature';
 import { OBJECT_PRESETS } from '../../data/creaturePresets';
@@ -19,12 +20,14 @@ import { INITIAL_USER } from '../../data/platformData';
 import { LobbyPetStage } from './LobbyPetStage';
 import { CreatureMorphModal } from '../morph/CreatureMorphModal';
 import { CybertronPassModal } from './CybertronPassModal';
+import { getForgeCombatBonuses } from '../../utils/forgeManager';
 import confetti from 'canvas-confetti';
 
 interface GameCatalogProps {
   onLaunchGame: (gameId: string, mode?: 'classic' | 'rush' | 'royale') => void;
   onOpenServers: () => void;
   onOpenExpedition?: () => void;
+  onOpenForge?: () => void;
   activeCreature?: BattleCreature;
   onSelectCreature?: (creature: BattleCreature) => void;
   user?: PlatformUser;
@@ -36,6 +39,7 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({
   onLaunchGame,
   onOpenServers,
   onOpenExpedition,
+  onOpenForge,
   activeCreature: externalActiveCreature,
   onSelectCreature,
   user: externalUser,
@@ -250,6 +254,28 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({
                 </span>
               </div>
             )}
+
+            {/* Forge Bonuses Indicator */}
+            {(() => {
+              const fb = getForgeCombatBonuses();
+              const hasBonuses = fb.damageBonusPercent > 0 || fb.healthBonusPercent > 0 || fb.fireRateBonusPercent > 0 || fb.specialBonusPercent > 0;
+              if (!hasBonuses) return null;
+              return (
+                <div 
+                  onClick={onOpenForge}
+                  className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 border border-amber-500/50 text-amber-200 flex items-center justify-between text-xs shadow-xs cursor-pointer hover:border-amber-400 transition-colors"
+                  title="Click to view upgrades in The Forge"
+                >
+                  <span className="flex items-center gap-1.5 font-bold text-amber-300">
+                    <Anvil className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Forge Multipliers</span>
+                  </span>
+                  <span className="font-mono font-bold text-amber-300 text-[11px]">
+                    +{fb.damageBonusPercent}% ATK • +{fb.healthBonusPercent}% HP
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Action Buttons */}
@@ -262,13 +288,23 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({
               <span>BATTLE NOW</span>
             </button>
 
+            {onOpenForge && (
+              <button
+                onClick={onOpenForge}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-800 to-amber-900 hover:from-amber-700 hover:to-amber-800 active:scale-[0.99] border border-amber-600/70 text-amber-100 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+              >
+                <Anvil className="w-4 h-4 text-amber-400" />
+                <span>The Forge • Power Up Robot</span>
+              </button>
+            )}
+
             {onOpenExpedition && (
               <button
                 onClick={onOpenExpedition}
                 className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-900 to-teal-900 hover:from-emerald-800 hover:to-teal-800 active:scale-[0.99] border border-emerald-600/60 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
               >
                 <Compass className="w-4 h-4 text-amber-400 animate-spin" style={{ animationDuration: '12s' }} />
-                <span>Real-World Expedition Map</span>
+                <span>Explore Map • Earn Points by Walking</span>
               </button>
             )}
 
@@ -277,7 +313,7 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({
               className="w-full py-2.5 px-4 rounded-xl bg-[#E8F2EA] hover:bg-[#DFEDE2] active:scale-[0.99] border border-[#BCD8C3] text-[#143823] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <Camera className="w-4 h-4 text-emerald-700" />
-              <span>Snap Object to Evolve</span>
+              <span>Scan Real Object to Build Robot</span>
             </button>
 
             <button
@@ -285,7 +321,7 @@ export const GameCatalog: React.FC<GameCatalogProps> = ({
               className="w-full text-center py-1.5 text-xs text-[#4D6957] hover:text-emerald-900 transition-colors flex items-center justify-center gap-1 cursor-pointer"
             >
               <Globe className="w-3.5 h-3.5" />
-              <span>Browse Multiplayer Servers</span>
+              <span>Play with Friends • Online Servers</span>
             </button>
           </div>
 

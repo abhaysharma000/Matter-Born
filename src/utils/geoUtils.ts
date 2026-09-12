@@ -28,12 +28,12 @@ export function calculateHaversineDistance(
  * Never displays street addresses or home labels.
  * Examples: "0 m", "250 m", "742 m", "1.2 km", "3.5 km"
  */
-export function formatExplorationDistance(meters: number): string {
-  if (meters < 0) meters = 0;
-  if (meters < 1000) {
-    return `${Math.round(meters)} m`;
+export function formatExplorationDistance(meters?: number | null): string {
+  const safeMeters = Math.max(0, Number(meters) || 0);
+  if (safeMeters < 1000) {
+    return `${Math.round(safeMeters)} m`;
   }
-  const km = meters / 1000;
+  const km = safeMeters / 1000;
   return `${km.toFixed(km >= 10 ? 1 : 2)} km`;
 }
 

@@ -13,7 +13,9 @@ import {
   Activity,
   Brain,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Compass,
+  Anvil
 } from 'lucide-react';
 import { BattleCreature } from '../../types/creature';
 import { ArenaHUDState } from '../../game3d/ThreeArenaEngine';
@@ -137,6 +139,41 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
                   {currentStrategy.replace(/_/g, ' ')}
                 </span>
               </button>
+
+              {/* Expedition Forge Scaling Indicator */}
+              {creature.explorationMetadata && (
+                <div
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-300 text-[9px] text-emerald-900 font-mono justify-between"
+                  title={creature.explorationMetadata.causalExplanation}
+                >
+                  <span className="flex items-center gap-1 font-bold">
+                    <Compass className="w-2.5 h-2.5 text-emerald-700" />
+                    <span>EXPEDITION BUFF</span>
+                  </span>
+                  <span className="font-bold text-emerald-800">
+                    +{creature.explorationMetadata.scanPowerBonusPercent}% ({creature.explorationMetadata.distanceMeters}m)
+                  </span>
+                </div>
+              )}
+
+              {/* Permanent Forge Upgrades Active Indicator */}
+              {hudState?.forgeBonuses && (
+                <div
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50/90 border border-amber-300 text-[9px] text-amber-950 font-mono justify-between"
+                  title={`Permanent Forge Combat Upgrades:\n⚔️ Weapon Damage: +${hudState.forgeBonuses.damageBonusPercent}%\n🔥 Fire Rate: +${hudState.forgeBonuses.fireRateBonusPercent}%\n✨ Special Ability: +${hudState.forgeBonuses.specialBonusPercent}%\n❤️ Max Health: +${hudState.forgeBonuses.healthBonusPercent}%`}
+                >
+                  <span className="flex items-center gap-1 font-black text-amber-900">
+                    <Anvil className="w-2.5 h-2.5 text-amber-700" />
+                    <span>FORGE BONUSES</span>
+                  </span>
+                  <div className="flex items-center gap-1 font-bold text-amber-900 text-[8.5px]">
+                    <span title="Weapon Damage">⚔️+{hudState.forgeBonuses.damageBonusPercent}%</span>
+                    <span title="Fire Rate">🔥+{hudState.forgeBonuses.fireRateBonusPercent}%</span>
+                    <span title="Special Skill">✨+{hudState.forgeBonuses.specialBonusPercent}%</span>
+                    <span title="Max Health">❤️+{hudState.forgeBonuses.healthBonusPercent}%</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -282,7 +319,7 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
             </button>
             <div className="flex items-center gap-0.5 mt-1">
               <span className="text-[9px] text-[#55685C] font-semibold">Dash</span>
-              <span className="text-[8px] px-1 py-0.2 rounded bg-[#F2EFE8] border border-[#DFD9CD] text-[#18251E] font-mono">SHIFT</span>
+              <span className="hidden sm:inline text-[8px] px-1 py-0.2 rounded bg-[#F2EFE8] border border-[#DFD9CD] text-[#18251E] font-mono">SHIFT</span>
             </div>
           </div>
 
@@ -297,7 +334,7 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
             </button>
             <div className="flex items-center gap-0.5 mt-1">
               <span className="text-[9px] text-[#55685C] font-semibold">Jump</span>
-              <span className="text-[8px] px-1 py-0.2 rounded bg-[#F2EFE8] border border-[#DFD9CD] text-[#18251E] font-mono">SPACE</span>
+              <span className="hidden sm:inline text-[8px] px-1 py-0.2 rounded bg-[#F2EFE8] border border-[#DFD9CD] text-[#18251E] font-mono">SPACE</span>
             </div>
           </div>
 
@@ -324,7 +361,7 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
             </button>
             <div className="flex items-center gap-0.5 mt-1">
               <span className="text-[9px] text-emerald-800 font-semibold">Skill</span>
-              <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-100 border border-emerald-300 text-emerald-900 font-mono">X</span>
+              <span className="hidden sm:inline text-[8px] px-1 py-0.2 rounded bg-emerald-100 border border-emerald-300 text-emerald-900 font-mono">X</span>
             </div>
           </div>
 
@@ -339,7 +376,7 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
             </button>
             <div className="flex items-center gap-0.5 mt-1">
               <span className="text-[9px] text-[#18251E] font-semibold">Attack</span>
-              <span className="text-[8px] px-1.5 py-0.2 rounded bg-emerald-100 border border-emerald-300 text-emerald-900 font-mono font-bold">Z</span>
+              <span className="hidden sm:inline text-[8px] px-1.5 py-0.2 rounded bg-emerald-100 border border-emerald-300 text-emerald-900 font-mono font-bold">Z</span>
             </div>
           </div>
 

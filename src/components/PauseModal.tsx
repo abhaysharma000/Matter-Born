@@ -39,7 +39,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           <div>
             <span className="text-slate-400">Territory</span>
             <p className="font-extrabold text-base text-emerald-400">
-              {engine.player.territoryPercentage.toFixed(1)}%
+              {(engine?.player?.territoryPercentage ?? 0).toFixed(1)}%
             </p>
           </div>
           <div>

@@ -18,30 +18,98 @@ import {
   DISCOVERY_RADIUS,
   DEFAULT_DEMO_COORDINATES,
   EXPLORATION_STORAGE_KEY,
+  LIFETIME_EP_STORAGE_KEY,
 } from '../constants/explorationConfig';
 import {
   calculateHaversineDistance,
   calculateDestinationPoint,
   validateGpsReading,
 } from '../utils/geoUtils';
+import {
+  getScanPowerTierConfig,
+  calculateExplorationRewardPoints,
+} from '../utils/explorationPowerScaling';
+import {
+  getExplorationPoints,
+  setExplorationPoints,
+  recordExpeditionProgress,
+} from '../utils/forgeManager';
+
+export interface EpRewardToast {
+  id: string;
+  epAmount: number;
+  milestoneTitle?: string;
+  milestoneReached?: boolean;
+  distanceMeters: number;
+}
 
 export function useExplorationSession() {
+  const [recentReward, setRecentReward] = useState<EpRewardToast | null>(null);
+  const clearRecentReward = useCallback(() => setRecentReward(null), []);
+
   const [session, setSession] = useState<ExplorationSession>(() => {
+    // Load lifetime EP
+    let lifetimeEp = getExplorationPoints();
+
     try {
       const stored = localStorage.getItem(EXPLORATION_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Ensure state is valid
+        const maxDist = parsed.maxDistanceReached ?? parsed.distanceExplored ?? 0;
+        const currentDist = Number(parsed.distanceExplored) || 0;
+        let activeMilestone: DiscoveryMilestoneConfig | null = null;
+        let nextMilestone: DiscoveryMilestoneConfig | null = EXPLORATION_MILESTONES[0];
+        for (let i = 0; i < EXPLORATION_MILESTONES.length; i++) {
+          const m = EXPLORATION_MILESTONES[i];
+          if (maxDist >= m.distanceMeters) {
+            activeMilestone = m;
+            nextMilestone = EXPLORATION_MILESTONES[i + 1] || null;
+          } else {
+            if (!nextMilestone || nextMilestone.distanceMeters <= maxDist) {
+              nextMilestone = m;
+            }
+            break;
+          }
+        }
+
+        const tierConfig = getScanPowerTierConfig(currentDist);
+        const claimedMilestones = Array.isArray(parsed.claimedMilestones) ? parsed.claimedMilestones : [];
+        const savedEp = Number(parsed.explorationPoints) || lifetimeEp;
+
+        // Ensure all properties exist and are valid numbers
         return {
-          ...parsed,
-          gpsStatus: 'GPS SEARCHING' as GpsStatus,
+          id: parsed.id || `exp-${Date.now()}`,
+          adventureName: parsed.adventureName || 'My Adventure',
+          state: (parsed.state || 'IDLE') as ExplorationState,
+          origin: parsed.origin || null,
+          currentLocation: parsed.currentLocation || null,
+          distanceExplored: currentDist,
+          maxDistanceReached: Number(maxDist) || 0,
+          speedMps: Number(parsed.speedMps) || 0,
           isStationary: false,
           stationaryDuration: 0,
+          gpsStatus: 'GPS READY' as GpsStatus,
+          gpsStatusMessage: undefined,
+          activeMilestone: parsed.activeMilestone || activeMilestone,
+          nextMilestone: parsed.nextMilestone !== undefined ? parsed.nextMilestone : nextMilestone,
+          unlockedTiers: Array.isArray(parsed.unlockedTiers) ? parsed.unlockedTiers : [],
+          activeDiscoveryZone: parsed.activeDiscoveryZone || null,
+          breadcrumbs: Array.isArray(parsed.breadcrumbs) ? parsed.breadcrumbs : [],
+          startedAt: Number(parsed.startedAt) || Date.now(),
+          isSimulated: Boolean(parsed.isSimulated),
+          explorationPoints: savedEp,
+          sessionPointsEarned: Number(parsed.sessionPointsEarned) || 0,
+          claimedMilestones,
+          currentScanTier: tierConfig.tier,
+          currentScanPowerMultiplier: tierConfig.powerMultiplier,
+          currentScanPowerBonus: tierConfig.powerBonusPercent,
         };
       }
     } catch {
       // ignore
     }
+
+    const defaultTierConfig = getScanPowerTierConfig(0);
     return {
       id: `exp-${Date.now()}`,
       state: 'IDLE' as ExplorationState,
@@ -61,6 +129,12 @@ export function useExplorationSession() {
       breadcrumbs: [],
       startedAt: Date.now(),
       isSimulated: false,
+      explorationPoints: lifetimeEp,
+      sessionPointsEarned: 0,
+      claimedMilestones: [],
+      currentScanTier: defaultTierConfig.tier,
+      currentScanPowerMultiplier: defaultTierConfig.powerMultiplier,
+      currentScanPowerBonus: defaultTierConfig.powerBonusPercent,
     };
   });
 
@@ -75,6 +149,16 @@ export function useExplorationSession() {
   const stationaryDurationRef = useRef<number>(0);
   const simulationIntervalRef = useRef<number | null>(null);
 
+  // Sync with Forge updates across windows / components
+  useEffect(() => {
+    const handleForgeUpdate = () => {
+      const current = getExplorationPoints();
+      setSession((prev) => (prev.explorationPoints !== current ? { ...prev, explorationPoints: current } : prev));
+    };
+    window.addEventListener('animatrix_forge_updated', handleForgeUpdate);
+    return () => window.removeEventListener('animatrix_forge_updated', handleForgeUpdate);
+  }, []);
+
   // Save session changes to localStorage
   useEffect(() => {
     try {
@@ -82,15 +166,23 @@ export function useExplorationSession() {
         EXPLORATION_STORAGE_KEY,
         JSON.stringify({
           id: session.id,
+          adventureName: session.adventureName,
           state: session.state,
           origin: session.origin,
           currentLocation: session.currentLocation,
           distanceExplored: session.distanceExplored,
           maxDistanceReached: session.maxDistanceReached,
+          speedMps: session.speedMps ?? 0,
           unlockedTiers: session.unlockedTiers,
           breadcrumbs: session.breadcrumbs.slice(-50), // keep latest 50
           startedAt: session.startedAt,
           isSimulated: session.isSimulated,
+          explorationPoints: session.explorationPoints ?? 0,
+          sessionPointsEarned: session.sessionPointsEarned ?? 0,
+          claimedMilestones: session.claimedMilestones ?? [],
+          currentScanTier: session.currentScanTier ?? 'LOCAL',
+          currentScanPowerMultiplier: session.currentScanPowerMultiplier ?? 1.0,
+          currentScanPowerBonus: session.currentScanPowerBonus ?? 0,
         })
       );
     } catch {
@@ -106,6 +198,12 @@ export function useExplorationSession() {
     session.breadcrumbs,
     session.startedAt,
     session.isSimulated,
+    session.explorationPoints,
+    session.sessionPointsEarned,
+    session.claimedMilestones,
+    session.currentScanTier,
+    session.currentScanPowerMultiplier,
+    session.currentScanPowerBonus,
   ]);
 
   // Generate discovery zones radially around the expedition origin
@@ -228,6 +326,26 @@ export function useExplorationSession() {
           }
         }
 
+        // Calculate Scan Power Tier and Exploration Points with anti-farming
+        const scanTierConfig = getScanPowerTierConfig(distance);
+        const rewardCalc = calculateExplorationRewardPoints(maxDist, prev.claimedMilestones || []);
+        const newlyEarnedEp = Math.max(0, rewardCalc.totalSessionPoints - (prev.sessionPointsEarned || 0));
+        
+        let updatedTotalEp = getExplorationPoints();
+        if (newlyEarnedEp > 0) {
+          updatedTotalEp = updatedTotalEp + newlyEarnedEp;
+          setExplorationPoints(updatedTotalEp);
+          recordExpeditionProgress(maxDist, newlyEarnedEp);
+          setRecentReward({
+            id: `${Date.now()}-${Math.random()}`,
+            epAmount: newlyEarnedEp,
+            milestoneTitle: activeMilestone?.title,
+            milestoneReached: rewardCalc.newMilestonesToClaim.length > 0,
+            distanceMeters: Math.round(maxDist),
+          });
+        }
+        const updatedClaimed = Array.from(new Set([...(prev.claimedMilestones || []), ...rewardCalc.newMilestonesToClaim]));
+
         // Check stationary condition
         const isCurrentlyStationary = validation.effectiveSpeed < MIN_MOVEMENT_THRESHOLD;
         let newStationaryDuration = prev.stationaryDuration;
@@ -239,7 +357,7 @@ export function useExplorationSession() {
         stationaryDurationRef.current = newStationaryDuration;
         const isConfirmedStationary = newStationaryDuration >= MIN_STATIONARY_DURATION;
 
-        // State machine evaluation
+        // State machine evaluation: any verified stop allows scanning with current tier!
         let nextState: ExplorationState = prev.state;
         if (
           prev.state === 'EXPLORING' ||
@@ -248,13 +366,10 @@ export function useExplorationSession() {
           prev.state === 'WAITING_FOR_STATIONARY' ||
           prev.state === 'SCAN_READY'
         ) {
-          if (activeMilestone) {
-            // Milestone reached!
-            if (isConfirmedStationary) {
-              nextState = 'SCAN_READY';
-            } else {
-              nextState = 'WAITING_FOR_STATIONARY';
-            }
+          if (isConfirmedStationary) {
+            nextState = 'SCAN_READY';
+          } else if (activeMilestone) {
+            nextState = 'WAITING_FOR_STATIONARY';
           } else if (nextMilestone && nextMilestone.distanceMeters - maxDist <= 50) {
             nextState = 'MILESTONE_APPROACHING';
           } else {
@@ -277,6 +392,12 @@ export function useExplorationSession() {
           unlockedTiers,
           breadcrumbs,
           state: nextState,
+          explorationPoints: updatedTotalEp,
+          sessionPointsEarned: rewardCalc.totalSessionPoints,
+          claimedMilestones: updatedClaimed,
+          currentScanTier: scanTierConfig.tier,
+          currentScanPowerMultiplier: scanTierConfig.powerMultiplier,
+          currentScanPowerBonus: scanTierConfig.powerBonusPercent,
         };
       });
     },
@@ -340,9 +461,10 @@ export function useExplorationSession() {
   }, []);
 
   // Action: Start Expedition
-  const startExpedition = useCallback(async () => {
+  const startExpedition = useCallback(async (customAdventureName?: string) => {
+    const finalAdventureName = customAdventureName?.trim() || 'My Adventure';
     setPermissionError(null);
-    setSession((s) => ({ ...s, state: 'LOCATION_PERMISSION', gpsStatus: 'GPS SEARCHING' }));
+    setSession((s) => ({ ...s, adventureName: finalAdventureName, state: 'LOCATION_PERMISSION', gpsStatus: 'GPS SEARCHING' }));
 
     if (!navigator.geolocation) {
       setPermissionError('Geolocation API not supported on this device.');
@@ -372,8 +494,10 @@ export function useExplorationSession() {
 
         lastReadingRef.current = currentReading;
 
-        setSession({
+        const defaultTier = getScanPowerTierConfig(0);
+        setSession((prev) => ({
           id: `exp-${Date.now()}`,
+          adventureName: finalAdventureName,
           state: 'EXPLORING',
           origin: originPoint,
           currentLocation: currentReading,
@@ -390,7 +514,13 @@ export function useExplorationSession() {
           breadcrumbs: [{ lat: originPoint.latitude, lng: originPoint.longitude, timestamp: Date.now() }],
           startedAt: Date.now(),
           isSimulated: false,
-        });
+          explorationPoints: prev.explorationPoints ?? 0,
+          sessionPointsEarned: 0,
+          claimedMilestones: [],
+          currentScanTier: defaultTier.tier,
+          currentScanPowerMultiplier: defaultTier.powerMultiplier,
+          currentScanPowerBonus: defaultTier.powerBonusPercent,
+        }));
 
         startGeolocationWatcher();
       },
@@ -409,7 +539,8 @@ export function useExplorationSession() {
   }, [startGeolocationWatcher]);
 
   // DEV ONLY: Explicitly start simulated GPS mode (clearly segregated for development/demo testing)
-  const startDevSimulatedExpedition = useCallback(() => {
+  const startDevSimulatedExpedition = useCallback((customAdventureName?: string) => {
+    const finalAdventureName = customAdventureName?.trim() || 'My Adventure';
     setPermissionError(null);
     const demoOrigin: ExplorationOrigin = {
       latitude: DEFAULT_DEMO_COORDINATES.latitude,
@@ -423,8 +554,10 @@ export function useExplorationSession() {
       speed: 0,
     };
 
-    setSession({
+    const defaultTier = getScanPowerTierConfig(0);
+    setSession((prev) => ({
       id: `exp-sim-${Date.now()}`,
+      adventureName: finalAdventureName,
       state: 'EXPLORING',
       origin: demoOrigin,
       currentLocation: demoReading,
@@ -441,7 +574,13 @@ export function useExplorationSession() {
       breadcrumbs: [{ lat: demoOrigin.latitude, lng: demoOrigin.longitude, timestamp: Date.now() }],
       startedAt: Date.now(),
       isSimulated: true,
-    });
+      explorationPoints: prev.explorationPoints ?? 0,
+      sessionPointsEarned: 0,
+      claimedMilestones: [],
+      currentScanTier: defaultTier.tier,
+      currentScanPowerMultiplier: defaultTier.powerMultiplier,
+      currentScanPowerBonus: defaultTier.powerBonusPercent,
+    }));
   }, []);
 
   // Action: Reset & Start New Expedition
@@ -457,7 +596,8 @@ export function useExplorationSession() {
     setIsSimulatingWalk(false);
     lastReadingRef.current = null;
 
-    setSession({
+    const defaultTier = getScanPowerTierConfig(0);
+    setSession((prev) => ({
       id: `exp-${Date.now()}`,
       state: 'IDLE',
       origin: null,
@@ -475,7 +615,13 @@ export function useExplorationSession() {
       breadcrumbs: [],
       startedAt: Date.now(),
       isSimulated: false,
-    });
+      explorationPoints: prev.explorationPoints ?? 0,
+      sessionPointsEarned: 0,
+      claimedMilestones: [],
+      currentScanTier: defaultTier.tier,
+      currentScanPowerMultiplier: defaultTier.powerMultiplier,
+      currentScanPowerBonus: defaultTier.powerBonusPercent,
+    }));
     setDiscoveryZones([]);
   }, []);
 
@@ -494,6 +640,19 @@ export function useExplorationSession() {
     setSession((s) => ({ ...s, state: 'BATTLE_READY' }));
   }, []);
 
+  // Spend exploration points (for permanent upgrades)
+  const spendExplorationPoints = useCallback((amount: number): boolean => {
+    let success = false;
+    const current = getExplorationPoints();
+    if (current >= amount) {
+      const remaining = current - amount;
+      setExplorationPoints(remaining);
+      setSession((prev) => ({ ...prev, explorationPoints: remaining }));
+      success = true;
+    }
+    return success;
+  }, []);
+
   // Demo / Simulation Controls: Walk Step / Jump
   const simulateWalkStep = useCallback((metersToAdd: number) => {
     setSession((prev) => {
@@ -505,6 +664,7 @@ export function useExplorationSession() {
       };
 
       const newDistance = prev.distanceExplored + metersToAdd;
+      const maxDist = Math.max(prev.maxDistanceReached, Math.round(newDistance));
       // Walk heading East (90 degrees)
       const newCoord = calculateDestinationPoint(origin.latitude, origin.longitude, newDistance, 90);
       const simulatedReading: GeoLocationReading = {
@@ -536,6 +696,26 @@ export function useExplorationSession() {
         }
       }
 
+      // Calculate rewards and scan tier
+      const scanTierConfig = getScanPowerTierConfig(newDistance);
+      const rewardCalc = calculateExplorationRewardPoints(maxDist, prev.claimedMilestones || []);
+      const newlyEarnedEp = Math.max(0, rewardCalc.totalSessionPoints - (prev.sessionPointsEarned || 0));
+      
+      let updatedTotalEp = getExplorationPoints();
+      if (newlyEarnedEp > 0) {
+        updatedTotalEp = updatedTotalEp + newlyEarnedEp;
+        setExplorationPoints(updatedTotalEp);
+        recordExpeditionProgress(maxDist, newlyEarnedEp);
+        setRecentReward({
+          id: `${Date.now()}-${Math.random()}`,
+          epAmount: newlyEarnedEp,
+          milestoneTitle: activeMilestone?.title,
+          milestoneReached: rewardCalc.newMilestonesToClaim.length > 0,
+          distanceMeters: Math.round(maxDist),
+        });
+      }
+      const updatedClaimed = Array.from(new Set([...(prev.claimedMilestones || []), ...rewardCalc.newMilestonesToClaim]));
+
       const breadcrumbs = [...prev.breadcrumbs, { lat: newCoord.latitude, lng: newCoord.longitude, timestamp: Date.now() }];
 
       return {
@@ -543,7 +723,7 @@ export function useExplorationSession() {
         origin,
         currentLocation: simulatedReading,
         distanceExplored: Math.round(newDistance),
-        maxDistanceReached: Math.max(prev.maxDistanceReached, Math.round(newDistance)),
+        maxDistanceReached: maxDist,
         speedMps: 1.4,
         isStationary: false,
         stationaryDuration: 0,
@@ -553,6 +733,12 @@ export function useExplorationSession() {
         unlockedTiers,
         breadcrumbs,
         isSimulated: true,
+        explorationPoints: updatedTotalEp,
+        sessionPointsEarned: rewardCalc.totalSessionPoints,
+        claimedMilestones: updatedClaimed,
+        currentScanTier: scanTierConfig.tier,
+        currentScanPowerMultiplier: scanTierConfig.powerMultiplier,
+        currentScanPowerBonus: scanTierConfig.powerBonusPercent,
       };
     });
   }, []);
@@ -568,54 +754,51 @@ export function useExplorationSession() {
       };
       lastReadingRef.current = stoppedReading;
 
-      const hasMilestone = prev.activeMilestone !== null;
       return {
         ...prev,
         currentLocation: stoppedReading,
         speedMps: 0,
         isStationary: true,
         stationaryDuration: MIN_STATIONARY_DURATION + 1,
-        state: hasMilestone ? 'SCAN_READY' : 'EXPLORING',
+        state: 'SCAN_READY',
       };
     });
   }, []);
 
   // Construct Discovery Context for handoff to Camera / Object DNA pipeline
   const getDiscoveryContext = useCallback((): ExplorationDiscoveryContext | null => {
-    if (!session.activeMilestone) {
-      // Basic Scout Tier if not at milestone yet
-      return {
-        expeditionId: session.id,
-        tier: 'COMMON',
-        distanceMeters: session.distanceExplored,
-        milestoneTitle: 'Scout Opportunity',
-        bonusTitle: 'Reconnaissance Optics',
-        bonusDescription: 'Scouted directly in the real world — standard alloy calibration unlocked.',
-        explorationCoins: 100,
-        explorationXp: 50,
-      };
-    }
+    const scanTierConfig = getScanPowerTierConfig(session.distanceExplored);
+    const activeMilestone = session.activeMilestone;
+
     return {
       expeditionId: session.id,
-      tier: session.activeMilestone.tier,
+      tier: activeMilestone?.tier || 'RECON',
       distanceMeters: session.distanceExplored,
-      milestoneTitle: session.activeMilestone.title,
-      bonusTitle: session.activeMilestone.bonusTitle,
-      bonusDescription: session.activeMilestone.bonusDescription,
-      explorationCoins: session.activeMilestone.explorationCoins,
-      explorationXp: session.activeMilestone.explorationXp,
+      milestoneTitle: activeMilestone?.title || `${scanTierConfig.label} Opportunity`,
+      bonusTitle: activeMilestone?.bonusTitle || `${scanTierConfig.label} Kinetic Tuning`,
+      bonusDescription: activeMilestone?.bonusDescription || `${scanTierConfig.powerBonusPercent}% power boost unlocked at current distance.`,
+      explorationCoins: activeMilestone?.explorationCoins || 100,
+      explorationXp: activeMilestone?.explorationXp || 50,
+      explorationPoints: session.explorationPoints,
+      scanPowerTier: scanTierConfig.tier,
+      scanPowerMultiplier: scanTierConfig.powerMultiplier,
+      scanPowerBonusPercent: scanTierConfig.powerBonusPercent,
+      scanPowerBadge: scanTierConfig.badge,
     };
-  }, [session.activeMilestone, session.distanceExplored, session.id]);
+  }, [session.activeMilestone, session.distanceExplored, session.id, session.explorationPoints]);
 
   return {
     session,
     discoveryZones,
     permissionError,
+    recentReward,
+    clearRecentReward,
     startExpedition,
     startDevSimulatedExpedition,
     startNewExpedition,
     openScanMode,
     handleScanCompleted,
+    spendExplorationPoints,
     simulateWalkStep,
     simulateStopWalking,
     isSimulatingWalk,

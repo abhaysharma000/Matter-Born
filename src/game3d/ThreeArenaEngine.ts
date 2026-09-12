@@ -24,6 +24,8 @@ import {
   CombatObservationMetrics,
   DetectedPlayerPattern 
 } from '../types/tacticalDirector';
+import { ForgeCombatBonuses, ForgeUpgradesState } from '../types/forge';
+import { getForgeUpgrades, getForgeCombatBonuses } from '../utils/forgeManager';
 
 export interface ArenaHUDState {
   playerHp: number;
@@ -80,6 +82,8 @@ export interface ArenaHUDState {
   recentAdaptationEvent?: TacticalAdaptationEvent | null;
   observationMetrics?: CombatObservationMetrics;
   tacticalAdaptationHistory?: TacticalAdaptationEvent[];
+  // Permanent Forge Upgrades Combat System
+  forgeBonuses?: ForgeCombatBonuses;
 }
 
 export class ThreeArenaEngine {
@@ -88,6 +92,10 @@ export class ThreeArenaEngine {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer | null = null;
   private animationFrameId: number | null = null;
+
+  // Permanent Forge Upgrades Combat State
+  private activeForgeUpgrades: ForgeUpgradesState = getForgeUpgrades();
+  public forgeBonuses: ForgeCombatBonuses = getForgeCombatBonuses(this.activeForgeUpgrades);
 
   // Adaptive Gemini Combat Director
   public combatObserver = new CombatObserver(20);
@@ -349,7 +357,7 @@ export class ThreeArenaEngine {
     if (lower.includes('ability') || lower.includes('special') || lower.includes('ultimate') || lower.includes('burst') || lower.includes('nova')) {
       if (this.playerFighter.abilityCooldown <= 0) {
         this.executeSpecialAbility(this.playerFighter);
-        this.playerFighter.abilityCooldown = this.playerFighter.creature.specialAbility.cooldown;
+        this.playerFighter.abilityCooldown = this.playerFighter.creature.specialAbility.cooldown * this.forgeBonuses.specialCdFactor;
         this.combatLogs.push(`🎙️ Voice Command Executed: [${commandText}] -> Ability Fired!`);
       } else {
         this.combatLogs.push(`🎙️ Voice Command: Ability cooling down (${Math.ceil(this.playerFighter.abilityCooldown)}s)`);
@@ -664,6 +672,17 @@ export class ThreeArenaEngine {
     this.onMatchEndCallback = onMatchEnd;
   }
 
+  // Forge Upgrades Management
+  public setForgeUpgrades(upgrades: ForgeUpgradesState) {
+    this.activeForgeUpgrades = upgrades;
+    this.forgeBonuses = getForgeCombatBonuses(upgrades);
+  }
+
+  public refreshForgeUpgrades() {
+    this.activeForgeUpgrades = getForgeUpgrades();
+    this.forgeBonuses = getForgeCombatBonuses(this.activeForgeUpgrades);
+  }
+
   // Force an immediate tactical re-evaluation / simulated demo adaptation
   public forceTacticalAdaptation(forcedPattern?: DetectedPlayerPattern) {
     if (!this.playerFighter || this.playerFighter.isDead) return;
@@ -680,6 +699,7 @@ export class ThreeArenaEngine {
   // Start a new 3D Battle Arena Match
   public startMatch(playerCreature: BattleCreature, opponentCount = 6) {
     this.cleanupCombatEntities();
+    this.refreshForgeUpgrades();
 
     this.startTime = performance.now();
     this.matchDuration = 0;
@@ -693,8 +713,9 @@ export class ThreeArenaEngine {
     this.recentAdaptationEvent = null;
     this.tacticalAdaptationHistory = [];
 
-    // 1. Initialize Player Fighter (Boosted HP pool for sustained battle endurance)
-    const playerBaseHp = Math.round(playerCreature.stats.hp * 1.5);
+    // 1. Initialize Player Fighter (Boosted HP pool for sustained battle endurance + Forge Alloy Armor)
+    const hpMultiplier = this.forgeBonuses.healthMultiplier;
+    const playerBaseHp = Math.round(playerCreature.stats.hp * 1.5 * hpMultiplier);
     const playerCombatDna = playerCreature.combatDna || deriveCombatDna(playerCreature);
     playerCreature.combatDna = playerCombatDna;
 
@@ -974,10 +995,11 @@ export class ThreeArenaEngine {
           this.playerFighter.z *= factor;
         }
 
-        // Actions: Attack - crisp 0.28s cooldown for rapid fluid combos (0.18s in Berserk)
+        // Actions: Attack - crisp base cooldown compressed by Forge Energon Overdrive
         if (this.isAttackPressed && this.playerFighter.attackCooldown <= 0) {
           this.executeAttack(this.playerFighter);
-          this.playerFighter.attackCooldown = isBerserk ? 0.18 : 0.28;
+          const baseAttackInterval = isBerserk ? 0.18 : 0.28;
+          this.playerFighter.attackCooldown = Math.max(0.08, baseAttackInterval / this.forgeBonuses.fireRateMultiplier);
         }
 
         // Actions: Special Ability (locked if silenced)
@@ -995,7 +1017,7 @@ export class ThreeArenaEngine {
             });
           } else {
             this.executeSpecialAbility(this.playerFighter);
-            this.playerFighter.abilityCooldown = this.playerFighter.creature.specialAbility.cooldown;
+            this.playerFighter.abilityCooldown = this.playerFighter.creature.specialAbility.cooldown * this.forgeBonuses.specialCdFactor;
           }
         }
 
@@ -1209,6 +1231,8 @@ export class ThreeArenaEngine {
         recentAdaptationEvent: this.recentAdaptationEvent,
         observationMetrics: this.combatObserver.getMetrics(),
         tacticalAdaptationHistory: this.tacticalAdaptationHistory,
+        // Permanent Forge Upgrades Combat System
+        forgeBonuses: this.forgeBonuses,
       });
     }
   }
@@ -1370,6 +1394,11 @@ export class ThreeArenaEngine {
     const vz = Math.cos(fighter.rotation) * speed;
 
     const baseMult = fighter.isPlayer ? 0.90 : 0.40;
+    let bulletDamage = Math.round(fighter.creature.stats.attack * baseMult);
+    if (fighter.isPlayer) {
+      bulletDamage = Math.round(bulletDamage * this.forgeBonuses.damageMultiplier);
+    }
+
     const proj: AttackProjectile = {
       id: `proj-${Date.now()}-${Math.random()}`,
       ownerId: fighter.id,
@@ -1378,7 +1407,7 @@ export class ThreeArenaEngine {
       z: fighter.z + Math.cos(fighter.rotation) * 1.5,
       vx,
       vz,
-      damage: Math.max(12, Math.round(fighter.creature.stats.attack * baseMult)),
+      damage: Math.max(12, bulletDamage),
       color: fighter.creature.visualParams.glowColor,
       radius: 0.45,
       element: fighter.creature.element,
@@ -1410,7 +1439,8 @@ export class ThreeArenaEngine {
     }, 400);
 
     const ability = fighter.creature.specialAbility;
-    const baseDamage = ability.damage;
+    const specialMultiplier = fighter.isPlayer ? this.forgeBonuses.specialMultiplier : 1.0;
+    const baseDamage = Math.round(ability.damage * specialMultiplier);
     const effectType = ability.effectType || 'damage_burst';
     const abilityColor = fighter.creature.visualParams.glowColor;
 
@@ -1423,14 +1453,16 @@ export class ThreeArenaEngine {
     switch (effectType) {
       case 'buff_shield': {
         // Optimus Prime: Matrix Bastion Shield
+        const healAmt = Math.round(75 * specialMultiplier);
+        const shieldAmt = Math.round(140 * specialMultiplier);
         // 1. Heal caster
-        fighter.currentHp = Math.min(fighter.maxHp, fighter.currentHp + 75);
+        fighter.currentHp = Math.min(fighter.maxHp, fighter.currentHp + healAmt);
         // 2. Grant Energy Shield
-        fighter.shieldHp = 140;
+        fighter.shieldHp = shieldAmt;
         fighter.shieldDuration = 6.0;
         this.damageFloaters.push({
           id: `floater-shield-${Date.now()}`,
-          text: 'MATRIX BASTION (+140 SHIELD)',
+          text: `MATRIX BASTION (+${shieldAmt} SHIELD)`,
           x: fighter.x,
           y: 4.5,
           z: fighter.z,
@@ -1440,7 +1472,7 @@ export class ThreeArenaEngine {
         });
         this.damageFloaters.push({
           id: `floater-heal-${Date.now()}`,
-          text: '+75 HP HEAL',
+          text: `+${healAmt} HP HEAL`,
           x: fighter.x,
           y: 3.5,
           z: fighter.z,

@@ -3,6 +3,7 @@ import { Navbar } from './components/platform/Navbar';
 import { GameCatalog } from './components/platform/GameCatalog';
 import { ServerBrowser } from './components/platform/ServerBrowser';
 import { ArmoryShop } from './components/platform/ArmoryShop';
+import { ForgeScreen } from './components/platform/ForgeScreen';
 import { Tournaments } from './components/platform/Tournaments';
 import { ClanWars } from './components/platform/ClanWars';
 import { DeveloperPortal } from './components/platform/DeveloperPortal';
@@ -12,6 +13,7 @@ import { CybertronPassModal } from './components/platform/CybertronPassModal';
 import { PlatformGamePlayer } from './components/platform/PlatformGamePlayer';
 import { ExplorationScreen } from './components/exploration/ExplorationScreen';
 import { CreatureMorphModal } from './components/morph/CreatureMorphModal';
+import { MobileBottomNav } from './components/platform/MobileBottomNav';
 import { PlatformUser, GameRoom, DailyQuest } from './types/platform';
 import { GameMode, MatchStats } from './types';
 import { BattleCreature } from './types/creature';
@@ -25,7 +27,7 @@ const USER_STORAGE_KEY = 'paperio_platform_user_v2';
 const QUESTS_STORAGE_KEY = 'paperio_platform_quests_v2';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'games' | 'servers' | 'armory' | 'tournaments' | 'clans' | 'developer' | 'expedition'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'servers' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition'>('games');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isQuestsOpen, setIsQuestsOpen] = useState(false);
   const [isCybertronPassOpen, setIsCybertronPassOpen] = useState(false);
@@ -257,12 +259,13 @@ export default function App() {
       />
 
       {/* Main Content View by Active Tab */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-6 pb-12">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 pt-4 sm:pt-6 pb-28 md:pb-12">
         {activeTab === 'games' && (
           <GameCatalog
             onLaunchGame={handleLaunchGame}
             onOpenServers={() => setActiveTab('servers')}
             onOpenExpedition={() => setActiveTab('expedition')}
+            onOpenForge={() => setActiveTab('forge')}
             activeCreature={selectedCreature}
             onSelectCreature={setSelectedCreature}
             user={user}
@@ -275,6 +278,7 @@ export default function App() {
           <ExplorationScreen
             onOpenScanPipeline={handleOpenExplorationScan}
             onBackToLobby={() => setActiveTab('games')}
+            onNavigateToForge={() => setActiveTab('forge')}
           />
         )}
 
@@ -285,10 +289,18 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'armory' && (
-          <ArmoryShop
-            user={user}
-            onUpdateUser={handleUpdateUser}
+        {(activeTab === 'forge' || activeTab === 'armory') && (
+          <ForgeScreen
+            creature={selectedCreature}
+            onNavigateTab={(tab) => {
+              if (tab === 'arena') {
+                handleLaunchGame('animatrix-3d-arena', 'classic');
+              } else if (tab === 'expedition') {
+                setActiveTab('expedition');
+              } else {
+                setActiveTab('games');
+              }
+            }}
           />
         )}
 
@@ -312,8 +324,15 @@ export default function App() {
         )}
       </main>
 
-      {/* Minimal Clean Footer */}
-      <footer className="border-t border-[#CFE2D3] bg-[#E4EFE6] px-4 sm:px-6 py-4 text-[#4D6957] text-xs">
+      {/* Mobile-Native Bottom Navigation Dock */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        onOpenPass={() => setIsCybertronPassOpen(true)}
+      />
+
+      {/* Desktop Clean Footer (hidden on mobile) */}
+      <footer className="hidden md:block border-t border-[#CFE2D3] bg-[#E4EFE6] px-4 sm:px-6 py-4 text-[#4D6957] text-xs">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-heading font-black text-[#14532D] text-xs">ANIMATRIX 3D</span>
@@ -325,8 +344,11 @@ export default function App() {
             <button onClick={() => setActiveTab('games')} className="hover:text-emerald-900 transition-colors font-medium">
               Arena
             </button>
-            <button onClick={() => setActiveTab('armory')} className="hover:text-emerald-900 transition-colors font-medium">
-              Locker
+            <button onClick={() => setActiveTab('expedition')} className="hover:text-emerald-900 transition-colors font-medium">
+              Explore
+            </button>
+            <button onClick={() => setActiveTab('forge')} className="hover:text-amber-800 transition-colors font-bold text-amber-900">
+              Forge
             </button>
             <button onClick={() => setActiveTab('servers')} className="hover:text-emerald-900 transition-colors font-medium">
               Servers

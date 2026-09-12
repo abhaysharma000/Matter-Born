@@ -1,5 +1,5 @@
 /**
- * Animatrix Real-World Exploration & Live Google Maps Types
+ * Animatrix Real-World Exploration & Live OpenStreetMap Types
  */
 
 export type ExplorationState =
@@ -17,12 +17,76 @@ export type ExplorationState =
   | 'COMPLETED';             // Expedition completed
 
 export type DiscoveryTier =
-  | 'COMMON'      // 250m - Scout Discovery
-  | 'UNCOMMON'    // 500m - Vanguard Discovery
-  | 'RARE'        // 750m - Apex Discovery
-  | 'EPIC'        // 1000m - Cybertronian Artifact
-  | 'ELITE'       // 2000m - Elite Discovery
-  | 'MYTHIC';     // 3000m - Prime Matrix Catalyst
+  | 'SCOUT'       // 5m - Local Scout
+  | 'RANGER'      // 50m - Ranger Discovery
+  | 'VANGUARD'    // 250m - Vanguard Discovery
+  | 'APEX'        // 500m - Apex Discovery
+  | 'ENERGON'     // 1000m - Cybertronian Artifact / Energon
+  | 'ELITE'       // 2000m - Elite Titan Relic
+  | 'MYTHIC'      // 3000m - Prime Matrix Catalyst
+  | 'RECON'
+  | 'COMMON'
+  | 'UNCOMMON'
+  | 'RARE'
+  | 'EPIC';
+
+export type ScanPowerTierName =
+  | 'LOCAL'
+  | 'SCOUT'
+  | 'RANGER'
+  | 'VANGUARD'
+  | 'ELITE'
+  | 'EPIC'
+  | 'TITAN'
+  | 'MYTHIC';
+
+export interface ScanPowerTierConfig {
+  tier: ScanPowerTierName;
+  minDistanceMeters: number;
+  maxDistanceMeters: number;
+  powerBonusPercent: number; // e.g. 20 for +20%
+  powerMultiplier: number; // e.g. 1.20
+  budgetRating: number; // e.g. 165
+  label: string;
+  badge: string;
+  accentColor: string;
+  description: string;
+}
+
+export interface ExplorationScanMetadata {
+  expeditionId: string;
+  scanDistanceMeters: number;
+  scanTier: ScanPowerTierName;
+  tierBadge: string;
+  powerMultiplier: number;
+  explorationBonusPercent: number;
+  budgetRating: number;
+  statBuffs: {
+    hp: number;
+    attack: number;
+    defense: number;
+    speed: number;
+    abilityDamage: number;
+  };
+  objectTraitPerk: string;
+  scannedAt: number;
+  originLocked: boolean;
+  causalExplanation: string;
+}
+
+export type ExplorationUpgradeType = 'mobility' | 'defense' | 'attack' | 'ability' | 'scanner';
+
+export interface ExplorationUpgradeItem {
+  id: ExplorationUpgradeType;
+  name: string;
+  description: string;
+  icon: string;
+  level: number;
+  maxLevel: number;
+  baseCost: number;
+  costMultiplier: number;
+  statBenefitLabel: string;
+}
 
 export type GpsStatus =
   | 'GPS READY'
@@ -60,6 +124,7 @@ export interface DiscoveryMilestoneConfig {
   bonusDescription: string;
   explorationXp: number;
   explorationCoins: number;
+  explorationPointsReward: number; // EP granted on reaching milestone
 }
 
 export interface DiscoveryZone {
@@ -79,6 +144,7 @@ export interface DiscoveryZone {
 
 export interface ExplorationSession {
   id: string;
+  adventureName?: string;
   state: ExplorationState;
   origin: ExplorationOrigin | null;
   currentLocation: GeoLocationReading | null;
@@ -97,6 +163,16 @@ export interface ExplorationSession {
   startedAt: number;
   completedAt?: number;
   isSimulated: boolean;
+
+  // Reward System 1: Exploration Points (EP)
+  explorationPoints: number;              // Current total EP available
+  sessionPointsEarned: number;            // Points accumulated during this specific expedition
+  claimedMilestones: number[];            // Milestone distances already claimed during this expedition (anti-farming)
+
+  // Reward System 2: Distance-Based Scan Power / Forge Potential
+  currentScanTier: ScanPowerTierName;     // Tier calculated from current distance
+  currentScanPowerMultiplier: number;    // e.g. 1.20 for +20%
+  currentScanPowerBonus: number;         // e.g. 20 for +20%
 }
 
 export interface ExplorationDiscoveryContext {
@@ -108,4 +184,9 @@ export interface ExplorationDiscoveryContext {
   bonusDescription: string;
   explorationCoins: number;
   explorationXp: number;
+  explorationPoints?: number;
+  scanPowerTier: ScanPowerTierName;
+  scanPowerMultiplier: number;
+  scanPowerBonusPercent: number;
+  scanPowerBadge: string;
 }

@@ -1,21 +1,23 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Swords, 
-  ShoppingBag,
   Volume2, 
   VolumeX, 
   Bot,
   Globe,
   Trophy,
   Crown,
-  Compass
+  Compass,
+  Anvil,
+  Zap
 } from 'lucide-react';
 import { PlatformUser } from '../../types/platform';
 import { PWAInstallButton } from '../pwa/PWAInstallButton';
+import { getExplorationPoints } from '../../utils/forgeManager';
 
 interface NavbarProps {
-  activeTab: 'games' | 'servers' | 'armory' | 'tournaments' | 'clans' | 'developer' | 'expedition';
-  onSelectTab: (tab: 'games' | 'servers' | 'armory' | 'tournaments' | 'clans' | 'developer' | 'expedition') => void;
+  activeTab: 'games' | 'servers' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition';
+  onSelectTab: (tab: 'games' | 'servers' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition') => void;
   user: PlatformUser;
   onOpenProfile: () => void;
   onOpenQuests: () => void;
@@ -35,6 +37,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSound,
   onOpenPass,
 }) => {
+  const [ep, setEp] = useState<number>(getExplorationPoints());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setEp(getExplorationPoints());
+    };
+    window.addEventListener('animatrix_forge_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('animatrix_forge_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
   return (
     <header className="sticky top-0 z-40 w-full bg-[#EDF5EE]/95 backdrop-blur-xl border-b border-[#CFE2D3] px-4 sm:px-6 py-3 select-none transition-colors">
       <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
@@ -83,19 +98,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <Compass className="w-3.5 h-3.5 text-amber-500" />
-              <span>Expedition</span>
+              <span>Explore</span>
             </button>
 
             <button
-              onClick={() => onSelectTab('armory')}
+              onClick={() => onSelectTab('forge')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === 'armory'
-                  ? 'bg-emerald-700 text-white shadow-sm'
+                activeTab === 'forge'
+                  ? 'bg-amber-700 text-white shadow-sm'
                   : 'text-[#4D6957] hover:text-[#143823] hover:bg-[#E2EDE4]'
               }`}
             >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Locker</span>
+              <Anvil className="w-3.5 h-3.5" />
+              <span>Forge</span>
             </button>
 
             <button
@@ -132,11 +147,16 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Right Section: Currencies, Audio, Profile */}
         <div className="flex items-center gap-2 sm:gap-3">
           
-          {/* Gold Coins */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#E4EFE6] border border-[#BCD8C3] text-xs font-bold text-[#143823]">
-            <span className="text-sm">🪙</span>
-            <span>{user.coins.toLocaleString()}</span>
-          </div>
+          {/* Exploration Points (EP) for The Forge */}
+          <button
+            onClick={() => onSelectTab('forge')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-50 to-amber-100 hover:from-amber-100 hover:to-amber-200 border border-amber-300 text-xs font-black text-amber-950 transition-colors shadow-xs active:scale-95 cursor-pointer"
+            title="Exploration Points (EP) - Click to upgrade your mech in The Forge"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500 animate-pulse" />
+            <span className="font-mono">{ep.toLocaleString()}</span>
+            <span className="text-[10px] text-amber-800 font-sans font-black">EP</span>
+          </button>
 
           {/* Gems */}
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#E4EFE6] border border-[#BCD8C3] text-xs font-bold text-[#143823]">
@@ -165,53 +185,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-black">
               {user.name.charAt(0).toUpperCase()}
             </div>
-            <span className="text-xs font-bold text-[#143823] hidden sm:inline">
+            <span className="text-xs font-bold text-[#143823]">
               Lv.{user.level}
             </span>
           </button>
 
         </div>
 
-      </div>
-
-      {/* Mobile Sub-Navigation Tabs */}
-      <div className="md:hidden flex items-center justify-around pt-2.5 mt-2.5 border-t border-[#CFE2D3] text-xs font-bold">
-        <button
-          onClick={() => onSelectTab('games')}
-          className={`flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg transition-colors ${
-            activeTab === 'games' ? 'text-white bg-emerald-700' : 'text-[#4D6957]'
-          }`}
-        >
-          <Swords className="w-3.5 h-3.5" />
-          <span>Arena</span>
-        </button>
-        <button
-          onClick={() => onSelectTab('expedition')}
-          className={`flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg transition-colors ${
-            activeTab === 'expedition' ? 'text-white bg-emerald-700' : 'text-[#4D6957]'
-          }`}
-        >
-          <Compass className="w-3.5 h-3.5" />
-          <span>Explore</span>
-        </button>
-        <button
-          onClick={() => onSelectTab('armory')}
-          className={`flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg transition-colors ${
-            activeTab === 'armory' ? 'text-white bg-emerald-700' : 'text-[#4D6957]'
-          }`}
-        >
-          <ShoppingBag className="w-3.5 h-3.5" />
-          <span>Locker</span>
-        </button>
-        <button
-          onClick={() => onSelectTab('servers')}
-          className={`flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg transition-colors ${
-            activeTab === 'servers' ? 'text-white bg-emerald-700' : 'text-[#4D6957]'
-          }`}
-        >
-          <Globe className="w-3.5 h-3.5" />
-          <span>Servers</span>
-        </button>
       </div>
     </header>
   );

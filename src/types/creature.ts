@@ -1,3 +1,5 @@
+import { ExplorationScanMetadata } from './exploration';
+
 export type CreatureElement = 'fire' | 'electric' | 'nature' | 'ice' | 'cyber' | 'void' | 'rock';
 export type CreatureRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic';
 export type BodyShape = 'behemoth' | 'serpent' | 'arachnid' | 'humanoid' | 'golem' | 'avian' | 'hydra' | 'mech';
@@ -346,6 +348,7 @@ export interface BattleCreature {
   explorationTier?: string;
   explorationBonusTitle?: string;
   explorationBonusPerk?: string;
+  explorationMetadata?: ExplorationScanMetadata;
   createdAt: number;
   wins?: number;
   matchesPlayed?: number;

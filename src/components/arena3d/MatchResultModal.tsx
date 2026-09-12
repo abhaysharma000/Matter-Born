@@ -117,9 +117,15 @@ export const MatchResultModal: React.FC<MatchResultModalProps> = ({
           </div>
           <div className="h-6 w-px bg-emerald-300" />
           <div className="text-center">
-            <div className="text-[10px] text-[#4D6957] uppercase font-bold">Gold Coins</div>
-            <div className="text-base font-black text-amber-700">+{stats.earnedCoins} 🪙</div>
+            <div className="text-[10px] text-[#4D6957] uppercase font-bold">Arena Rating</div>
+            <div className="text-base font-black text-emerald-800">+{Math.max(10, Math.round(stats.score / 25))} 🏆</div>
           </div>
+        </div>
+
+        {/* Forge Progression Callout */}
+        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300/80 text-[11px] text-amber-950 flex items-center gap-2 text-left">
+          <span className="text-base">⚡</span>
+          <span><strong>Want higher damage & hull?</strong> Go on real-world Expeditions to earn <strong>Exploration Points (EP)</strong> for The Forge!</span>
         </div>
 
         {/* Action Buttons */}

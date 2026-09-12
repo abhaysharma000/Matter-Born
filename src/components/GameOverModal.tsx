@@ -93,7 +93,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               <span>Territory</span>
             </div>
             <span className="text-2xl font-black text-emerald-400">
-              {stats.percentage.toFixed(1)}%
+              {(stats?.percentage ?? 0).toFixed(1)}%
             </span>
           </div>
 

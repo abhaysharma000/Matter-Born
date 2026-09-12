@@ -7,13 +7,15 @@ import {
   Calendar, 
   Check, 
   Edit3, 
-  Coins, 
+  Zap, 
   Gem, 
   Medal, 
   X,
-  Flame
+  Flame,
+  Compass
 } from 'lucide-react';
 import { PlatformUser } from '../../types/platform';
+import { getLifetimeExplorationStats } from '../../utils/forgeManager';
 
 interface ProfileModalProps {
   user: PlatformUser;
@@ -28,6 +30,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(user.name);
+  const lifetimeStats = getLifetimeExplorationStats();
 
   const handleSaveName = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,8 +43,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     setIsEditingName(false);
   };
 
-  const winRate = user.totalMatches > 0 ? ((user.victories / user.totalMatches) * 100).toFixed(1) : '0';
-  const kdRatio = user.totalMatches > 0 ? (user.totalKills / user.totalMatches).toFixed(1) : '0';
+  const totalMatches = user?.totalMatches || 0;
+  const winRate = totalMatches > 0 ? (((user?.victories || 0) / totalMatches) * 100).toFixed(1) : '0';
+  const kdRatio = totalMatches > 0 ? (((user?.totalKills || 0) / totalMatches)).toFixed(1) : '0';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
@@ -126,14 +130,39 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
           {/* Currencies Badge */}
           <div className="flex items-center gap-3 p-3 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3]">
-            <div className="flex items-center gap-1.5 text-sm font-black text-amber-700">
-              <Coins className="w-4 h-4" />
-              <span>{user.coins.toLocaleString()}</span>
+            <div className="flex items-center gap-1.5 text-sm font-black text-amber-800" title="Exploration Points available for The Forge">
+              <Zap className="w-4 h-4 text-amber-600 fill-amber-500" />
+              <span>{lifetimeStats.currentEp.toLocaleString()} EP</span>
             </div>
             <div className="w-[1px] h-4 bg-[#BCD8C3]" />
             <div className="flex items-center gap-1.5 text-sm font-black text-emerald-700">
               <Gem className="w-4 h-4" />
               <span>{user.gems.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Real-World Exploration Career (Phase 16) */}
+        <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950 via-[#0d2a1b] to-emerald-950 text-emerald-100 border border-emerald-700/50 space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-emerald-400">
+            <span className="flex items-center gap-1.5">
+              <Compass className="w-4 h-4" />
+              <span>REAL-WORLD EXPEDITION CAREER</span>
+            </span>
+            <span className="font-mono text-[10px] text-emerald-300/80">Authoritative Haversine</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+            <div className="p-2 rounded-lg bg-black/30 border border-emerald-600/30">
+              <div className="text-xs text-emerald-300 font-medium">Total Distance</div>
+              <div className="font-mono font-black text-base text-white mt-0.5">{lifetimeStats.formattedTotalDistance}</div>
+            </div>
+            <div className="p-2 rounded-lg bg-black/30 border border-emerald-600/30">
+              <div className="text-xs text-emerald-300 font-medium">Best Expedition</div>
+              <div className="font-mono font-black text-base text-white mt-0.5">{lifetimeStats.formattedBestExpedition}</div>
+            </div>
+            <div className="p-2 rounded-lg bg-black/30 border border-emerald-600/30">
+              <div className="text-xs text-emerald-300 font-medium">Lifetime EP Earned</div>
+              <div className="font-mono font-black text-base text-amber-400 mt-0.5">⚡{lifetimeStats.totalEpEarned.toLocaleString()}</div>
             </div>
           </div>
         </div>
@@ -203,8 +232,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <div className="font-mono font-bold text-emerald-800 text-sm">
                     {match.territory}%
                   </div>
-                  <div className="text-[11px] text-amber-700 font-semibold">
-                    +{match.coinsEarned} 🟡  +{match.xpEarned} XP
+                  <div className="text-[11px] text-emerald-700 font-bold">
+                    +{match.xpEarned} XP
                   </div>
                 </div>
               </div>

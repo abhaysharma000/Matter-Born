@@ -317,7 +317,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               Best Map %
             </span>
             <span className="text-base font-extrabold text-emerald-400">
-              {savedStats.highScorePercentage.toFixed(1)}%
+              {(savedStats?.highScorePercentage ?? 0).toFixed(1)}%
             </span>
           </div>
           <div className="flex flex-col">
