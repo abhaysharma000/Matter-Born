@@ -1,6 +1,7 @@
 import express from "express";
 import http from "http";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
@@ -530,21 +531,12 @@ app.get("/api/multiplayer/rooms/:code/sync", (req, res) => {
 });
 
 // Lazy initialization of GoogleGenAI
-let aiClient: GoogleGenAI | null = null;
-function getGenAI(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-  if (!aiClient) {
-    aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-  }
-  return aiClient;
+function getGenAI(userKey?: string): GoogleGenAI | null {
+  const apiKey = (userKey && userKey.trim().length > 10)
+    ? userKey.trim()
+    : (process.env.GEMINI_API_KEY || "");
+  if (!apiKey || apiKey.length < 10) return null;
+  return new GoogleGenAI({ apiKey });
 }
 
 // System Prompt for Object Recognition 2.0: Open-Ended Visual-to-Robot Transformation
@@ -1637,13 +1629,15 @@ function ensureStructuredObjectDna(
   creature.visualParams.geometryHints = vt.geometryMotifs;
   creature.visualParams.primaryShape = vt.silhouette;
   creature.visualParams.visualFingerprint = dna.visualFingerprint;
-  creature.visualParams.primaryColor = vt.primaryColor || primary;
-  creature.visualParams.secondaryColor = vt.secondaryColor || secondary;
+  creature.visualParams.primaryColor = clientAnalyzed?.primaryHex || vt.primaryColor || primary;
+  creature.visualParams.secondaryColor = clientAnalyzed?.secondaryHex || vt.secondaryColor || secondary;
   creature.visualParams.roughnessFactor = vt.roughness;
   creature.visualParams.metallicFactor = vt.metallic;
 
   // Real-world physical shape archetype for 3D transformer morphology
-  if (!creature.visualParams.shapeArchetype) {
+  if (clientAnalyzed?.shapeArchetype) {
+    creature.visualParams.shapeArchetype = clientAnalyzed.shapeArchetype;
+  } else if (!creature.visualParams.shapeArchetype) {
     const text = `${objName} ${vt.silhouette || ''} ${dna.visualIdentity?.shape || ''}`.toLowerCase();
     if (
       /bottle|flask|canister|thermos|cylinder|cylindrical|can\b|tumbler|mug|cup\b|tube|pipe|beaker|container|dispenser|shampoo|spray|deodorant|candle|vase|penn\b|pencil|marker/i.test(
@@ -2699,11 +2693,49 @@ const PRESET_FALLBACK_CREATURES: Record<string, any> = {
 
 // API: Health check
 app.get("/api/health", (req, res) => {
+  const currentKey = process.env.GEMINI_API_KEY || "";
+  const isValidFormat = currentKey.length >= 10;
   res.json({
     status: "ok",
-    hasApiKey: !!process.env.GEMINI_API_KEY,
+    hasApiKey: isValidFormat,
+    keyFormatValid: isValidFormat,
     timestamp: Date.now(),
   });
+});
+
+// API: Update and persist Gemini AI Studio Key
+app.post("/api/settings/gemini-key", (req, res) => {
+  const { apiKey } = req.body;
+  if (!apiKey || typeof apiKey !== "string") {
+    return res.status(400).json({ success: false, error: "API key is required." });
+  }
+  const cleanKey = apiKey.trim();
+  if (cleanKey.length < 10) {
+    return res.status(400).json({
+      success: false,
+      error: "API key is too short. Please provide a valid Google Gemini API key.",
+    });
+  }
+  process.env.GEMINI_API_KEY = cleanKey;
+  try {
+    const envPath = path.resolve(process.cwd(), ".env");
+    let content = "";
+    if (fs.existsSync(envPath)) {
+      content = fs.readFileSync(envPath, "utf-8");
+      if (/GEMINI_API_KEY=.*/.test(content)) {
+        content = content.replace(/GEMINI_API_KEY=.*/, `GEMINI_API_KEY=${cleanKey}`);
+      } else {
+        content += `\nGEMINI_API_KEY=${cleanKey}\n`;
+      }
+    } else {
+      content = `GEMINI_API_KEY=${cleanKey}\n`;
+    }
+    fs.writeFileSync(envPath, content, "utf-8");
+  } catch (err) {
+    console.warn("Could not write to .env file:", err);
+  }
+  console.log("[Server] Gemini API Key updated to valid AIzaSy key.");
+  return res.json({ success: true, message: "Gemini API key updated successfully." });
 });
 
 // API: Convert Photo to 3D Battle Creature via Gemini Multimodal AI
@@ -2714,14 +2746,15 @@ app.post("/api/creature/generate", async (req, res) => {
     promptHint = "",
     clientAnalyzed,
     distanceFromStartMeters = 0,
+    userApiKey,
   } = req.body;
   const currentDistance = Math.max(0, Number(distanceFromStartMeters) || 0);
 
   try {
-    const ai = getGenAI();
+    const ai = getGenAI(userApiKey || (req.headers["x-gemini-key"] as string));
 
     if (!ai) {
-      console.log("No GEMINI_API_KEY configured; synthesizing procedural creature from image colors and hint");
+      console.log("No valid GEMINI_API_KEY configured; synthesizing procedural creature from image colors and contours");
       const creature = generateProceduralCreature(promptHint, clientAnalyzed, currentDistance);
       return res.json({
         success: true,
@@ -2789,10 +2822,10 @@ Output strictly valid JSON matching the schema including the complete objectDna 
 
     // Cascading models: prioritize fast reliable multimodal vision models
     const candidateModels = [
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-flash",
-      "gemini-2.5-flash-lite",
+      "gemini-3.8-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
       "gemini-flash-latest"
     ];
     let lastError: any = null;
@@ -2819,16 +2852,21 @@ Output strictly valid JSON matching the schema including the complete objectDna 
 
         if (creatureData && creatureData.name) {
           if (!creatureData.visualParams) creatureData.visualParams = {};
-          // Enforce shapeArchetype matching the physical object
+          // Enforce shapeArchetype matching the physical object contours
           creatureData.visualParams.shapeArchetype =
-            creatureData.visualParams.shapeArchetype ||
             clientAnalyzed?.shapeArchetype ||
+            creatureData.visualParams.shapeArchetype ||
             detectServerObjectShapeArchetype(creatureData.originalObject || creatureData.name, creatureData.objectDna?.visualIdentity?.shape);
 
-          // If Gemini did not provide primaryColor or left it generic, ensure it aligns with detected photo colors
-          if (clientAnalyzed?.primaryHex && (!creatureData.visualParams?.primaryColor || creatureData.visualParams.primaryColor === "#FF4500")) {
+          // Force primaryColor and secondaryColor to faithfully match detected photo colors!
+          if (clientAnalyzed?.primaryHex) {
             creatureData.visualParams.primaryColor = clientAnalyzed.primaryHex;
-            creatureData.visualParams.secondaryColor = clientAnalyzed.secondaryHex || creatureData.visualParams.secondaryColor;
+          }
+          if (clientAnalyzed?.secondaryHex) {
+            creatureData.visualParams.secondaryColor = clientAnalyzed.secondaryHex;
+          }
+          if (clientAnalyzed?.topColors) {
+            creatureData.visualParams.topColors = clientAnalyzed.topColors;
           }
           break;
         }
@@ -3330,18 +3368,28 @@ Provide the optimal tactical counter-decision as structured JSON.`;
 // Start server with Vite middleware for local/prod compatibility
 async function startServer() {
   const server = http.createServer(app);
+  const distPath = path.join(process.cwd(), "dist");
+  const hasDist = fs.existsSync(path.join(distPath, "index.html"));
+  const isProd = process.env.NODE_ENV?.trim() === "production" || hasDist;
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: { server },
-      },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+  if (!isProd) {
+    try {
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: { server },
+        },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (err) {
+      console.warn("Vite middleware error, falling back to static dist:", err);
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   } else {
-    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
@@ -3350,6 +3398,7 @@ async function startServer() {
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Matter-Born Server running on http://0.0.0.0:${PORT}`);
+    console.log(`Local Network (Wi-Fi): http://172.32.1.134:${PORT}`);
   });
 }
 

@@ -580,7 +580,7 @@ export async function analyzeImageFileOrBase64(
           return Math.sqrt(dr * dr + dg * dg + db * db);
         };
 
-        const dominant = candidateColors[0] || { r: 0, g: 229, b: 255 };
+        const dominant = candidateColors[0] || { r: 0, g: 229, b: 255, count: 1, score: 1, sat: 0.5 };
 
         // Find secondary color that is perceptually distinct
         let secondary = candidateColors.find((c) => colorDist(c, dominant) >= 38);
@@ -643,7 +643,7 @@ export async function analyzeImageFileOrBase64(
         const maxC = Math.max(dominant.r, dominant.g, dominant.b) / 255;
         const minC = Math.min(dominant.r, dominant.g, dominant.b) / 255;
         const saturation = maxC === 0 ? 0 : (maxC - minC) / maxC;
-        const colorEntropy = Math.min(1.0, Object.keys(colorCounts).length / 30.0);
+        const colorEntropy = Math.min(1.0, Object.keys(colorBins).length / 30.0);
 
         // Step 7: Procedural Name tailored to shape and extracted colors
         let suggestedRobotName = 'Cybertron Sentinel';

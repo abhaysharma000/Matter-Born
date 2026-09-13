@@ -7,6 +7,7 @@
 
 📖 **Full REST API Documentation**: [Read the complete API Reference (API_README.md)](API_README.md)
 📲 **Direct Android APK Download**: [Download Matter-Born.apk](https://github.com/abhaysharma000/Matter-Born/raw/main/Matter-Born.apk)
+🇮🇳 **Hinglish Game Guide**: [Simple Game Guide in Hinglish (README_HINGLISH.md)](README_HINGLISH.md)
 
 ---
 

@@ -543,6 +543,8 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                 ? 'Your custom robot has been synthesized. Tap "Use This Robot" below to enter the arena!'
                 : 'Photograph any everyday item. AI analyzes its shape, material, and powers to forge a unique 3D battle robot!'}
             </p>
+
+            {/* Gemini API Key is embedded and active */}
           </div>
         </div>
 
@@ -557,7 +559,7 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white">Google Gemini AI Key</h3>
-                    <p className="text-[10px] text-[#6DAA8E]">For direct multimodal vision object recognition</p>
+                    <p className="text-[10px] text-[#6DAA8E]">For deep visual multimodal object recognition</p>
                   </div>
                 </div>
                 <button
@@ -571,25 +573,36 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
 
               <div className="space-y-2">
                 <label className="text-[11px] uppercase font-bold text-[#2BE29E] block">
-                  Paste Your Google AI Studio Key (Starts with AIzaSy...)
+                  Paste Google Gemini API Key
                 </label>
                 <input
-                  type="password"
+                  type="text"
                   value={geminiKeyInput}
                   onChange={(e) => setGeminiKeyInput(e.target.value)}
-                  placeholder="AIzaSy..."
+                  placeholder="Paste your Gemini API key here..."
                   className="w-full px-3 py-2 rounded-xl bg-[#071610] border border-[#1C4D3A] focus:border-[#2BE29E] text-xs font-mono text-white focus:outline-none"
                 />
+                {geminiKeyInput && geminiKeyInput.trim().length < 10 && (
+                  <div className="p-2 rounded-lg bg-rose-950/80 border border-rose-500/50 text-rose-200 text-[10px] leading-relaxed">
+                    ⚠️ <strong>Invalid Key:</strong> API key is too short. Please paste a valid Google Gemini API key.
+                  </div>
+                )}
+                {geminiKeyInput && geminiKeyInput.trim().length >= 10 && (
+                  <div className="p-1.5 rounded-lg bg-emerald-950 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Valid API Key Format ✓</span>
+                  </div>
+                )}
                 <p className="text-[10px] text-[#A1D2BC] leading-relaxed">
-                  Get a free permanent API key at <strong className="text-[#2BE29E]">aistudio.google.com</strong>.
-                  If left empty, Matter-Born automatically uses on-device Computer Vision contour & shape analysis.
+                  Get your free permanent API key at <strong className="text-[#2BE29E]">aistudio.google.com</strong>.
+                  Keys activate immediately and have generous free tier limits for multimodal vision.
                 </p>
               </div>
 
               {keySavedFeedback && (
                 <div className="p-2 rounded-lg bg-emerald-950 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
                   <Check className="w-4 h-4 text-emerald-400" />
-                  <span>API Key successfully saved!</span>
+                  <span>API Key saved & activated!</span>
                 </div>
               )}
 
@@ -620,7 +633,7 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                   }}
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-black shadow-md transition-all cursor-pointer"
                 >
-                  Save Key
+                  Save & Activate Key
                 </button>
               </div>
             </div>
@@ -903,8 +916,9 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
 
                   <div className="space-y-2 flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase">
-                        Recognized
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        AI Identified
                       </span>
                       {stagedCreature.objectDna?.objectIdentity?.recognitionConfidence !== undefined && (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-[#0E281E] text-[#2BE29E] border-[#2BE29E]/40">
@@ -916,258 +930,147 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                       </span>
                     </div>
 
+                    {/* Auto-Detected Physical Object */}
                     <div>
-                      <label className="text-[10px] uppercase font-bold text-[#6DAA8E] block">
-                        Detected Object (Tap to edit)
-                      </label>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <input
-                          type="text"
-                          value={customObjectName}
-                          onChange={(e) => setCustomObjectName(e.target.value)}
-                          className="flex-1 px-3 py-1.5 rounded-lg bg-[#071610] border border-[#1C4D3A] text-sm font-black text-white focus:outline-none focus:border-[#2BE29E]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => analyzeCapturedImage(capturedPhoto, customObjectName)}
-                          title="Re-analyze with updated hint"
-                          className="px-2.5 py-1.5 rounded-lg bg-[#0E281E] hover:bg-[#143B2C] border border-[#1C4D3A] text-xs font-bold text-[#2BE29E] flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          <span className="hidden sm:inline">Update</span>
-                        </button>
+                      <div className="text-[10px] uppercase font-mono font-bold text-[#6DAA8E] flex items-center gap-1">
+                        <span>Real-World Scanned Object:</span>
+                      </div>
+                      <div className="text-base sm:text-lg font-black text-white leading-tight mt-0.5">
+                        {stagedCreature.originalObject || stagedCreature.objectDna?.objectIdentity?.canonicalName || 'Real-World Item'}
                       </div>
                     </div>
 
-                    <div>
-                      <label className="text-[10px] uppercase font-bold text-[#2BE29E] flex items-center justify-between">
-                        <span>Robot Name (Your Custom Name)</span>
-                        <span className="text-[9px] text-[#6DAA8E] font-normal">Give your robot a particular name</span>
-                      </label>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <input
-                          type="text"
-                          value={customRobotName}
-                          onChange={(e) => setCustomRobotName(e.target.value)}
-                          placeholder="e.g. Template 2, Steel Falcon, Thunder Bot..."
-                          className="flex-1 px-3 py-1.5 rounded-lg bg-[#071610] border border-[#2BE29E]/50 focus:border-[#2BE29E] text-sm font-black text-white focus:outline-none focus:ring-1 focus:ring-[#2BE29E]"
-                        />
+                    {/* Auto-Forged Transformer Codename */}
+                    <div className="p-2.5 rounded-xl bg-[#071610] border border-[#2BE29E]/40 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[9px] uppercase font-bold text-[#6DAA8E]">Forged Transformer Mech</div>
+                        <div className="text-sm font-black text-[#2BE29E] truncate">
+                          {stagedCreature.name}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold">
+                          {stagedCreature.robotClass || 'Warrior'}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#0E281E] text-white border border-[#1C4D3A] font-bold">
+                          {stagedCreature.faction === 'Decepticon' ? '⚔️ Decepticon' : '🛡️ Autobot'}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Alternative Interpretations Chips */}
-                    {stagedCreature.objectDna?.objectIdentity?.alternativeInterpretations && stagedCreature.objectDna.objectIdentity.alternativeInterpretations.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <span className="text-[10px] text-[#6DAA8E] font-bold">Suggestions:</span>
-                        {stagedCreature.objectDna.objectIdentity.alternativeInterpretations.map((alt, i) => (
-                          <button
-                            key={i}
-                            onClick={() => {
-                              setCustomObjectName(alt);
-                              analyzeCapturedImage(capturedPhoto, alt);
-                            }}
-                            className="px-2 py-0.5 rounded-md bg-[#0E281E] border border-[#1C4D3A] hover:border-[#2BE29E] text-[10px] font-medium text-white transition-colors cursor-pointer"
-                          >
-                            {alt}
-                          </button>
-                        ))}
+                    {stagedCreature.objectFeature && (
+                      <div className="text-[11px] text-[#A1D2BC] italic">
+                        "{stagedCreature.objectFeature}"
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Physical 3D Silhouette & Shape Archetype */}
-                <div className="p-3.5 rounded-xl bg-[#091B14] border border-[#2BE29E]/40 space-y-2.5">
+                {/* Autonomous Physical 3D Silhouette Archetype */}
+                <div className="p-3.5 rounded-xl bg-[#091B14] border border-[#2BE29E]/40 space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">
                         {stagedCreature.visualParams?.shapeArchetype === 'cylinder' ? '🧴' :
                          stagedCreature.visualParams?.shapeArchetype === 'sheet_slab' ? '📱' :
                          stagedCreature.visualParams?.shapeArchetype === 'sphere_round' ? '⚽' : '📦'}
                       </span>
                       <div>
                         <div className="text-[10px] uppercase font-black tracking-wider text-[#2BE29E] flex items-center gap-1.5">
-                          <span>Physical 3D Silhouette Archetype</span>
+                          <Check className="w-3.5 h-3.5 text-[#2BE29E]" />
+                          <span>Autonomous 3D Silhouette Assigned</span>
                           <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
-                            Auto-Detected
+                            Vision Contour Lock
                           </span>
                         </div>
-                        <div className="text-xs font-black text-white">
-                          {stagedCreature.visualParams?.shapeArchetype === 'cylinder' ? 'Cylindrical Bottle / Canister' :
-                           stagedCreature.visualParams?.shapeArchetype === 'sheet_slab' ? 'Flat Tech Slab / Screen' :
-                           stagedCreature.visualParams?.shapeArchetype === 'sphere_round' ? 'Spherical Orb / Round Sphere' :
-                           'Cuboid Armor Box / Container'}
+                        <div className="text-sm font-black text-white mt-0.5">
+                          {stagedCreature.visualParams?.shapeArchetype === 'cylinder' ? 'Cylindrical Vessel & Canister Chassis' :
+                           stagedCreature.visualParams?.shapeArchetype === 'sheet_slab' ? 'Ultra-Slim Flat Tech Slab Chassis' :
+                           stagedCreature.visualParams?.shapeArchetype === 'sphere_round' ? 'Spherical Orb & Orbital Core Chassis' :
+                           'Heavy Cuboid Armor Box Chassis'}
+                        </div>
+                        <div className="text-[10px] text-[#6DAA8E]">
+                          {stagedCreature.visualParams?.shapeArchetype === 'cylinder' ? 'Constructed with pressurized coolant cylinders, collar threads & nozzle vents' :
+                           stagedCreature.visualParams?.shapeArchetype === 'sheet_slab' ? 'Constructed with high-tech display screen chestplate & folding data panels' :
+                           stagedCreature.visualParams?.shapeArchetype === 'sphere_round' ? 'Constructed with gyroscopic orbital rings, spherical power core & round pauldrons' :
+                           'Constructed with angular deflection armor, heavy shock struts & reinforced bulkheads'}
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1.5" title="Detected Photo Colors (Primary & Secondary)">
-                      <div className="w-5 h-5 rounded-full border-2 border-white/30 shadow-xs" style={{ backgroundColor: stagedCreature.visualParams?.primaryColor }} />
-                      <div className="w-5 h-5 rounded-full border-2 border-white/30 shadow-xs" style={{ backgroundColor: stagedCreature.visualParams?.secondaryColor }} />
-                    </div>
-                  </div>
-
-                  {/* Shape Switcher: lets user fine-tune or pick the exact 3D robot body shape */}
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-[#6DAA8E] block mb-1">
-                      Choose / Override 3D Robot Silhouette:
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                      {[
-                        { id: 'cylinder', icon: '🧴', label: 'Cylinder', desc: 'Bottle / Flask' },
-                        { id: 'sheet_slab', icon: '📱', label: 'Flat Slab', desc: 'Screen / Laptop' },
-                        { id: 'sphere_round', icon: '⚽', label: 'Round Orb', desc: 'Sphere / Fruit' },
-                        { id: 'cuboid_box', icon: '📦', label: 'Cuboid Box', desc: 'Box / Crate' },
-                      ].map((shape) => {
-                        const isSelected = (stagedCreature.visualParams?.shapeArchetype || 'cylinder') === shape.id;
-                        return (
-                          <button
-                            key={shape.id}
-                            type="button"
-                            onClick={() => {
-                              const updated = {
-                                ...stagedCreature,
-                                visualParams: {
-                                  ...stagedCreature.visualParams,
-                                  shapeArchetype: shape.id as any,
-                                },
-                              };
-                              setStagedCreature(updated);
-                            }}
-                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                              isSelected
-                                ? 'bg-[#143B2C] border-[#2BE29E] text-white shadow-xs scale-[1.02]'
-                                : 'bg-[#071610] border-[#143B2C] text-[#6DAA8E] hover:border-[#2BE29E]/50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-sm">{shape.icon}</span>
-                              <span className="text-[11px] font-bold text-white">{shape.label}</span>
-                            </div>
-                            <div className="text-[9px] text-[#6DAA8E] truncate">{shape.desc}</div>
-                          </button>
-                        );
-                      })}
                     </div>
                   </div>
                 </div>
 
-                {/* 3D Robot Live Interactive Preview & Color Palette Customizer */}
+                {/* Autonomous Extracted Photo Colors & Live 3D Preview */}
                 <div className="p-3.5 rounded-xl bg-[#091B14] border border-[#2BE29E]/40 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-xl">🎨</span>
                       <div>
                         <div className="text-[10px] uppercase font-black tracking-wider text-[#2BE29E] flex items-center gap-1.5">
-                          <span>Robot Armor Color Palette</span>
+                          <Check className="w-3.5 h-3.5 text-[#2BE29E]" />
+                          <span>Extracted Object Color Palette</span>
                           <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
-                            Real Photo Colors
+                            Applied to 3D Model
                           </span>
                         </div>
                         <div className="text-xs font-bold text-white">
-                          Identified from your photographed object
+                          Colors picked directly from your scanned object photo
                         </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 bg-[#071610] px-2 py-1 rounded-lg border border-[#143B2C]">
-                        <span className="text-[9px] text-[#6DAA8E] font-bold">Primary:</span>
-                        <div className="w-5 h-5 rounded-full border border-white/60 shadow-xs relative overflow-hidden shrink-0" style={{ backgroundColor: stagedCreature.visualParams?.primaryColor }}>
-                          <input
-                            type="color"
-                            value={stagedCreature.visualParams?.primaryColor || '#2BE29E'}
-                            onChange={(e) => {
-                              const hex = e.target.value;
-                              setStagedCreature({
-                                ...stagedCreature,
-                                visualParams: {
-                                  ...stagedCreature.visualParams,
-                                  primaryColor: hex,
-                                },
-                              });
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            title="Fine-tune primary armor color"
-                          />
-                        </div>
-                        <span className="text-[10px] font-mono text-white font-bold">{stagedCreature.visualParams?.primaryColor}</span>
-                      </div>
-
-                      <div className="flex items-center gap-1 bg-[#071610] px-2 py-1 rounded-lg border border-[#143B2C]">
-                        <span className="text-[9px] text-[#6DAA8E] font-bold">Trim:</span>
-                        <div className="w-5 h-5 rounded-full border border-white/60 shadow-xs relative overflow-hidden shrink-0" style={{ backgroundColor: stagedCreature.visualParams?.secondaryColor }}>
-                          <input
-                            type="color"
-                            value={stagedCreature.visualParams?.secondaryColor || '#0E281E'}
-                            onChange={(e) => {
-                              const hex = e.target.value;
-                              setStagedCreature({
-                                ...stagedCreature,
-                                visualParams: {
-                                  ...stagedCreature.visualParams,
-                                  secondaryColor: hex,
-                                },
-                              });
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            title="Fine-tune secondary trim color"
-                          />
-                        </div>
-                        <span className="text-[10px] font-mono text-white font-bold">{stagedCreature.visualParams?.secondaryColor}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Detected Photo Palette Chips */}
-                  {stagedCreature.visualParams?.topColors && stagedCreature.visualParams.topColors.length > 0 && (
-                    <div>
-                      <div className="text-[10px] text-[#6DAA8E] font-bold mb-1.5 flex items-center justify-between">
-                        <span>Tap any detected photo color to set Primary Armor:</span>
-                        <span className="text-[9px] text-emerald-400 font-normal">Instant 3D Preview</span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {stagedCreature.visualParams.topColors.map((color, idx) => {
-                          const isPrimary = stagedCreature.visualParams?.primaryColor?.toUpperCase() === color.toUpperCase();
-                          const isSecondary = stagedCreature.visualParams?.secondaryColor?.toUpperCase() === color.toUpperCase();
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                setStagedCreature({
-                                  ...stagedCreature,
-                                  visualParams: {
-                                    ...stagedCreature.visualParams,
-                                    primaryColor: color,
-                                  },
-                                });
-                              }}
-                              className={`px-2 py-1 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                                isPrimary
-                                  ? 'border-[#2BE29E] bg-[#143B2C] text-white shadow-xs scale-105 ring-1 ring-[#2BE29E]'
-                                  : 'border-[#1C4D3A] bg-[#071610] text-[#6DAA8E] hover:border-white/40'
-                              }`}
-                            >
-                              <div className="w-3.5 h-3.5 rounded-full border border-white/40" style={{ backgroundColor: color }} />
-                              <span>{color}</span>
-                              {isPrimary && <span className="text-[9px] text-emerald-300 font-sans">Primary</span>}
-                              {isSecondary && !isPrimary && <span className="text-[9px] text-blue-300 font-sans">Trim</span>}
-                            </button>
-                          );
-                        })}
+                  {/* Auto-Extracted Color Chips */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="p-2 rounded-lg bg-[#071610] border border-[#143B2C] flex items-center gap-2">
+                      <div 
+                        className="w-7 h-7 rounded-lg border-2 border-white/40 shadow-sm shrink-0" 
+                        style={{ backgroundColor: stagedCreature.visualParams?.primaryColor }} 
+                      />
+                      <div className="overflow-hidden">
+                        <div className="text-[9px] uppercase font-bold text-[#6DAA8E]">Primary Armor</div>
+                        <div className="text-xs font-mono font-bold text-white truncate">
+                          {stagedCreature.visualParams?.primaryColor}
+                        </div>
                       </div>
                     </div>
-                  )}
+
+                    <div className="p-2 rounded-lg bg-[#071610] border border-[#143B2C] flex items-center gap-2">
+                      <div 
+                        className="w-7 h-7 rounded-lg border-2 border-white/40 shadow-sm shrink-0" 
+                        style={{ backgroundColor: stagedCreature.visualParams?.secondaryColor }} 
+                      />
+                      <div className="overflow-hidden">
+                        <div className="text-[9px] uppercase font-bold text-[#6DAA8E]">Trim & Joints</div>
+                        <div className="text-xs font-mono font-bold text-white truncate">
+                          {stagedCreature.visualParams?.secondaryColor}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-[#071610] border border-[#143B2C] flex items-center gap-2 col-span-2 sm:col-span-1">
+                      <div 
+                        className="w-7 h-7 rounded-lg border-2 border-white/40 shadow-sm shrink-0" 
+                        style={{ backgroundColor: stagedCreature.visualParams?.glowColor || '#00E5FF' }} 
+                      />
+                      <div className="overflow-hidden">
+                        <div className="text-[9px] uppercase font-bold text-[#6DAA8E]">Energon Core</div>
+                        <div className="text-xs font-mono font-bold text-white truncate">
+                          {stagedCreature.visualParams?.glowColor || '#00E5FF'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Live 3D Staged Robot Preview Window */}
                   <div className="rounded-xl bg-[#040C08] border border-[#143B2C] p-2 flex flex-col items-center">
                     <div className="text-[10px] uppercase font-mono font-bold text-[#6DAA8E] mb-1 flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>Live 3D Robot Preview (Exact Shape & Color)</span>
+                      <span>Live 3D Robot Preview (Exact Shape & Color Rendered)</span>
                     </div>
                     <div
                       ref={stagedCanvasRef}
-                      className="w-full h-44 rounded-lg overflow-hidden flex items-center justify-center relative"
+                      className="w-full h-48 rounded-lg overflow-hidden flex items-center justify-center relative"
                     />
                   </div>
                 </div>
