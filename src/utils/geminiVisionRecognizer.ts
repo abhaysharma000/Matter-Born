@@ -167,16 +167,18 @@ export async function recognizeAndGenerateCreature(
 ): Promise<{ creature: BattleCreature; isAIGenerated: boolean }> {
   const baseUrl = getApiBaseUrl();
   const candidateEndpoints = [
+    'http://localhost:3000/api/creature/generate',
+    'http://127.0.0.1:3000/api/creature/generate',
     `${baseUrl}/api/creature/generate`,
     '/api/creature/generate',
     'http://172.32.1.134:3000/api/creature/generate',
-  ];
+  ].filter(Boolean);
 
   // 1. Try server endpoints first
   for (const endpoint of candidateEndpoints) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
 
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -200,6 +202,22 @@ export async function recognizeAndGenerateCreature(
             c.visualParams?.shapeArchetype ||
             clientAnalyzed?.shapeArchetype ||
             detectObjectShapeArchetype(c.originalObject || c.name, c.objectDna?.visualIdentity?.shape);
+
+          // Guarantee that detected photo colors are faithfully respected
+          const isGenericPrimary =
+            !c.visualParams?.primaryColor ||
+            ['#00E5FF', '#DC2626', '#15803D', '#475569'].includes(c.visualParams.primaryColor);
+          const finalPrimary = (isGenericPrimary && clientAnalyzed?.primaryHex)
+            ? clientAnalyzed.primaryHex
+            : (c.visualParams?.primaryColor || clientAnalyzed?.primaryHex || '#2BE29E');
+
+          const isGenericSecondary =
+            !c.visualParams?.secondaryColor ||
+            ['#7C4DFF', '#1E293B', '#78350F', '#94A3B8'].includes(c.visualParams.secondaryColor);
+          const finalSecondary = (isGenericSecondary && clientAnalyzed?.secondaryHex)
+            ? clientAnalyzed.secondaryHex
+            : (c.visualParams?.secondaryColor || clientAnalyzed?.secondaryHex || '#0E281E');
+
           return {
             creature: {
               ...c,
@@ -207,6 +225,9 @@ export async function recognizeAndGenerateCreature(
               visualParams: {
                 ...(c.visualParams || {}),
                 shapeArchetype: archetype,
+                primaryColor: finalPrimary,
+                secondaryColor: finalSecondary,
+                topColors: clientAnalyzed?.topColors || c.visualParams?.topColors || [finalPrimary, finalSecondary],
               },
               capturedImageUrl: imageBase64,
               createdAt: Date.now(),
@@ -335,6 +356,7 @@ Identify the object precisely and generate the Transformers battle mech in valid
               secondaryColor,
               scale: parsed.visualParams?.bodyScale || 1.15,
               shapeArchetype,
+              topColors: clientAnalyzed?.topColors || [primaryColor, secondaryColor],
             },
             objectDna: parsed.objectDna,
             capturedImageUrl: imageBase64,
@@ -404,6 +426,7 @@ Identify the object precisely and generate the Transformers battle mech in valid
       primaryColor: clientAnalyzed?.primaryHex || '#2BE29E',
       secondaryColor: clientAnalyzed?.secondaryHex || '#0E281E',
       shapeArchetype: assignedShape,
+      topColors: clientAnalyzed?.topColors || [clientAnalyzed?.primaryHex || '#2BE29E', clientAnalyzed?.secondaryHex || '#0E281E'],
     },
     createdAt: Date.now(),
   };

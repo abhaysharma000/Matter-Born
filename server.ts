@@ -2510,6 +2510,7 @@ function generateProceduralCreature(hint: string, clientAnalyzed?: any, distance
       secondaryColor: secondary,
       glowColor: glow,
       shapeArchetype: assignedShape,
+      topColors: clientAnalyzed?.topColors || [primary, secondary],
       objectArchetype: assignedShape === 'cylinder' ? 'bottle_can' : assignedShape === 'sheet_slab' ? 'phone_tech' : 'generic_item',
       bodyShape: "mech",
       scale: 1.1,
@@ -2524,8 +2525,8 @@ function generateProceduralCreature(hint: string, clientAnalyzed?: any, distance
       hasScreen: assignedShape === 'sheet_slab',
       hasCapOrLid: assignedShape === 'cylinder',
       auraParticleType: isWarm ? "fire" : "cyber_cubes",
-      metallicFactor: 0.65,
-      roughnessFactor: 0.35,
+      metallicFactor: 0.25,
+      roughnessFactor: 0.38,
     },
   };
 

@@ -65,12 +65,13 @@ export class Creature3DBuilder {
     const vt = creature.visualTransmutation || creature.objectDna?.visualTransmutation || vp.visualTransmutation;
 
     // 1. High-Tech PBR Armor Materials with Real-World Physical Material Fidelity
+    // Keep metalness balanced (0.22) and roughness tuned (0.36) so real-world object colors are vivid and punchy!
     const matRoughness = typeof vt?.roughness === 'number'
-      ? vt.roughness
-      : (typeof vp.roughnessFactor === 'number' ? vp.roughnessFactor : 0.28);
+      ? Math.max(0.15, Math.min(0.85, vt.roughness))
+      : (typeof vp.roughnessFactor === 'number' ? Math.max(0.15, Math.min(0.85, vp.roughnessFactor)) : 0.36);
     const matMetalness = typeof vt?.metallic === 'number'
-      ? vt.metallic
-      : (typeof vp.metallicFactor === 'number' ? vp.metallicFactor : 0.88);
+      ? Math.max(0.05, Math.min(0.45, vt.metallic))
+      : (typeof vp.metallicFactor === 'number' ? Math.max(0.05, Math.min(0.45, vp.metallicFactor)) : 0.22);
 
     const armorPlateMat = new THREE.MeshStandardMaterial({
       color: primaryColor,

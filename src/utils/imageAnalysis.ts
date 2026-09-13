@@ -35,6 +35,7 @@ export interface ExtractedImageFeatures {
   circularity: number;
   suggestedRobotName: string;
   suggestedOriginalObject: string;
+  topColors?: string[];
 }
 
 // Heuristic keyword matcher for real-world physical object scale and structural complexity
@@ -269,6 +270,7 @@ export async function analyzeImageFileOrBase64(
       circularity: 0.6,
       suggestedRobotName: 'Hydro-Vortex Vanguard',
       suggestedOriginalObject: 'Cylindrical Bottle',
+      topColors: ['#00E5FF', '#7C4DFF', '#00FF66', '#FFD600', '#18181B'],
     };
 
     if (typeof window === 'undefined') {
@@ -502,8 +504,15 @@ export async function analyzeImageFileOrBase64(
           }
         }
 
-        // Step 6: Pure Foreground Color Extraction
-        const colorCounts: Record<string, { r: number; g: number; b: number; count: number }> = {};
+        // Step 6: Pure Foreground & Center-Focus Dominant Color Extraction
+        // Tracks authentic RGB centroids without coarse distortion or bias against dark/neutral real-world objects
+        interface ColorBin {
+          sumR: number;
+          sumG: number;
+          sumB: number;
+          count: number;
+        }
+        const colorBins: Record<string, ColorBin> = {};
         let totalR = 0, totalG = 0, totalB = 0, totalFg = 0;
 
         for (let y = 0; y < sampleSize; y++) {
@@ -516,48 +525,104 @@ export async function analyzeImageFileOrBase64(
             const g = data[i + 1];
             const b = data[i + 2];
 
-            // Weight center pixels higher than perimeter
+            // Center Gaussian radial weight: highest at reticle center where user frames the object
             const normX = (x - centerX) / (fgWidth / 2 || 1);
             const normY = (y - centerY) / (fgHeight / 2 || 1);
-            const dist = Math.hypot(normX, normY);
-            const weight = Math.max(0.4, 1.4 - dist * 0.8);
+            const distSq = normX * normX + normY * normY;
+            const centerWeight = Math.max(0.35, Math.exp(-1.8 * distSq) * 1.6);
 
-            totalR += r * weight;
-            totalG += g * weight;
-            totalB += b * weight;
-            totalFg += weight;
+            totalR += r * centerWeight;
+            totalG += g * centerWeight;
+            totalB += b * centerWeight;
+            totalFg += centerWeight;
 
-            // Quantize to 24-step color bins
-            const qr = Math.round(r / 24) * 24;
-            const qg = Math.round(g / 24) * 24;
-            const qb = Math.round(b / 24) * 24;
-            const key = `${qr},${qg},${qb}`;
+            // 16-step quantization binning, accumulating exact raw RGB sums for true centroids
+            const binSize = 16;
+            const br = Math.floor(r / binSize);
+            const bg = Math.floor(g / binSize);
+            const bb = Math.floor(b / binSize);
+            const key = `${br},${bg},${bb}`;
 
-            if (!colorCounts[key]) {
-              colorCounts[key] = { r: qr, g: qg, b: qb, count: 0 };
+            if (!colorBins[key]) {
+              colorBins[key] = { sumR: 0, sumG: 0, sumB: 0, count: 0 };
             }
-            colorCounts[key].count += weight;
+            colorBins[key].sumR += r * centerWeight;
+            colorBins[key].sumG += g * centerWeight;
+            colorBins[key].sumB += b * centerWeight;
+            colorBins[key].count += centerWeight;
           }
         }
 
         if (totalFg === 0) return resolve(fallback);
 
-        // Sort colors favoring vibrant hues over washed-out neutral greys
-        const sortedColors = Object.values(colorCounts).sort((a, b) => {
-          const satA = (Math.max(a.r, a.g, a.b) - Math.min(a.r, a.g, a.b)) / 255;
-          const satB = (Math.max(b.r, b.g, b.b) - Math.min(b.r, b.g, b.b)) / 255;
-          const scoreA = a.count * (1 + satA * 1.5);
-          const scoreB = b.count * (1 + satB * 1.5);
-          return scoreB - scoreA;
-        });
-
-        const dominant = sortedColors[0] || { r: 0, g: 229, b: 255 };
-        const secondary = sortedColors[1] || { r: 124, g: 77, b: 255 };
+        // Compute true average centroid color for each bin
+        const candidateColors = Object.values(colorBins).map((bin) => {
+          const r = bin.sumR / (bin.count || 1);
+          const g = bin.sumG / (bin.count || 1);
+          const b = bin.sumB / (bin.count || 1);
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const sat = max > 0 ? (max - min) / max : 0;
+          // Faithful score based on real pixel mass and center focus
+          const score = bin.count * (1.0 + sat * 0.2);
+          return { r, g, b, count: bin.count, score, sat };
+        }).sort((a, b) => b.score - a.score);
 
         const toHex = (r: number, g: number, b: number) => {
           const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
           return `#${clamp(r).toString(16).padStart(2, '0')}${clamp(g).toString(16).padStart(2, '0')}${clamp(b).toString(16).padStart(2, '0')}`.toUpperCase();
         };
+
+        const colorDist = (c1: { r: number; g: number; b: number }, c2: { r: number; g: number; b: number }) => {
+          const dr = c1.r - c2.r;
+          const dg = c1.g - c2.g;
+          const db = c1.b - c2.b;
+          return Math.sqrt(dr * dr + dg * dg + db * db);
+        };
+
+        const dominant = candidateColors[0] || { r: 0, g: 229, b: 255 };
+
+        // Find secondary color that is perceptually distinct
+        let secondary = candidateColors.find((c) => colorDist(c, dominant) >= 38);
+        if (!secondary) {
+          const isLight = (dominant.r * 0.299 + dominant.g * 0.587 + dominant.b * 0.114) > 128;
+          if (isLight) {
+            secondary = {
+              r: Math.max(0, dominant.r * 0.55),
+              g: Math.max(0, dominant.g * 0.55),
+              b: Math.max(0, dominant.b * 0.55),
+              count: 0, score: 0, sat: dominant.sat
+            };
+          } else {
+            secondary = {
+              r: Math.min(255, dominant.r * 1.5 + 40),
+              g: Math.min(255, dominant.g * 1.5 + 40),
+              b: Math.min(255, dominant.b * 1.5 + 40),
+              count: 0, score: 0, sat: dominant.sat
+            };
+          }
+        }
+
+        // Top 5 extracted unique colors from photo
+        const topColors: string[] = [toHex(dominant.r, dominant.g, dominant.b)];
+        for (const cand of candidateColors) {
+          const hex = toHex(cand.r, cand.g, cand.b);
+          if (!topColors.includes(hex)) {
+            const tooClose = topColors.some((existing) => {
+              const er = parseInt(existing.slice(1, 3), 16);
+              const eg = parseInt(existing.slice(3, 5), 16);
+              const eb = parseInt(existing.slice(5, 7), 16);
+              return colorDist(cand, { r: er, g: eg, b: eb }) < 28;
+            });
+            if (!tooClose) {
+              topColors.push(hex);
+              if (topColors.length >= 5) break;
+            }
+          }
+        }
+        if (topColors.length < 2) {
+          topColors.push(toHex(secondary.r, secondary.g, secondary.b));
+        }
 
         const primaryHex = toHex(dominant.r, dominant.g, dominant.b);
         const secondaryHex = toHex(secondary.r, secondary.g, secondary.b);
@@ -618,6 +683,7 @@ export async function analyzeImageFileOrBase64(
           primaryHex,
           secondaryHex,
           glowHex,
+          topColors,
           isWarm,
           brightness: Math.round(avgBrightness),
           saturation,

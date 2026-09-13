@@ -94,6 +94,7 @@ export interface CreatureVisualParams {
   geometryHints?: string[];
   primaryShape?: string;
   shapeArchetype?: 'cylinder' | 'sheet_slab' | 'sphere_round' | 'cuboid_box';
+  topColors?: string[];
   visualFingerprint?: VisualFingerprintDNA;
   visualTransmutation?: VisualTransmutationContract;
 }

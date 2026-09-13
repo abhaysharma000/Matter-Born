@@ -90,6 +90,8 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
   const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
   const threeCleanupRef = useRef<(() => void) | null>(null);
+  const stagedCanvasRef = useRef<HTMLDivElement | null>(null);
+  const stagedThreeCleanupRef = useRef<(() => void) | null>(null);
 
   // Initialize camera when camera tab is active
   useEffect(() => {
@@ -315,6 +317,64 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
     }, 600);
   };
 
+  // 3D Staged Robot Interactive Live Preview (Before Confirming Transformation)
+  useEffect(() => {
+    if (!stagedCreature || !stagedCanvasRef.current) return;
+
+    if (stagedThreeCleanupRef.current) {
+      stagedThreeCleanupRef.current();
+    }
+
+    const container = stagedCanvasRef.current;
+    const width = container.clientWidth || 300;
+    const height = container.clientHeight || 180;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+    camera.position.set(0, 2.5, 6.4);
+    camera.lookAt(0, 1.9, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.innerHTML = '';
+    container.appendChild(renderer.domElement);
+
+    // Three-point balanced studio lighting to bring out authentic object colors
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    keyLight.position.set(5, 10, 7);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xa5c8ff, 0.9);
+    fillLight.position.set(-5, 6, -5);
+    scene.add(fillLight);
+    const bottomLight = new THREE.DirectionalLight(0xffedd5, 0.5);
+    bottomLight.position.set(0, -4, 4);
+    scene.add(bottomLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+
+    const model = Creature3DBuilder.buildCreature(stagedCreature);
+    scene.add(model.root);
+
+    let animId: number;
+    const renderLoop = () => {
+      const t = performance.now() * 0.001;
+      model.root.rotation.y = t * 0.85;
+      model.updateAnimation(t, true, false, false);
+      renderer.render(scene, camera);
+      animId = requestAnimationFrame(renderLoop);
+    };
+    renderLoop();
+
+    const cleanup = () => {
+      cancelAnimationFrame(animId);
+      model.dispose();
+      renderer.dispose();
+    };
+    stagedThreeCleanupRef.current = cleanup;
+
+    return cleanup;
+  }, [stagedCreature]);
+
   // 3D Creature Interactive Preview in Reveal Screen
   useEffect(() => {
     if (!generatedCreature || !previewCanvasRef.current) return;
@@ -338,10 +398,16 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    const light = new THREE.DirectionalLight(0xffffff, 1.5);
-    light.position.set(5, 10, 7);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    keyLight.position.set(5, 10, 7);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xa5c8ff, 0.9);
+    fillLight.position.set(-5, 6, -5);
+    scene.add(fillLight);
+    const bottomLight = new THREE.DirectionalLight(0xffedd5, 0.5);
+    bottomLight.position.set(0, -4, 4);
+    scene.add(bottomLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
 
     const model = Creature3DBuilder.buildCreature(generatedCreature);
     scene.add(model.root);
@@ -982,6 +1048,127 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                         );
                       })}
                     </div>
+                  </div>
+                </div>
+
+                {/* 3D Robot Live Interactive Preview & Color Palette Customizer */}
+                <div className="p-3.5 rounded-xl bg-[#091B14] border border-[#2BE29E]/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🎨</span>
+                      <div>
+                        <div className="text-[10px] uppercase font-black tracking-wider text-[#2BE29E] flex items-center gap-1.5">
+                          <span>Robot Armor Color Palette</span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
+                            Real Photo Colors
+                          </span>
+                        </div>
+                        <div className="text-xs font-bold text-white">
+                          Identified from your photographed object
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 bg-[#071610] px-2 py-1 rounded-lg border border-[#143B2C]">
+                        <span className="text-[9px] text-[#6DAA8E] font-bold">Primary:</span>
+                        <div className="w-5 h-5 rounded-full border border-white/60 shadow-xs relative overflow-hidden shrink-0" style={{ backgroundColor: stagedCreature.visualParams?.primaryColor }}>
+                          <input
+                            type="color"
+                            value={stagedCreature.visualParams?.primaryColor || '#2BE29E'}
+                            onChange={(e) => {
+                              const hex = e.target.value;
+                              setStagedCreature({
+                                ...stagedCreature,
+                                visualParams: {
+                                  ...stagedCreature.visualParams,
+                                  primaryColor: hex,
+                                },
+                              });
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            title="Fine-tune primary armor color"
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-white font-bold">{stagedCreature.visualParams?.primaryColor}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 bg-[#071610] px-2 py-1 rounded-lg border border-[#143B2C]">
+                        <span className="text-[9px] text-[#6DAA8E] font-bold">Trim:</span>
+                        <div className="w-5 h-5 rounded-full border border-white/60 shadow-xs relative overflow-hidden shrink-0" style={{ backgroundColor: stagedCreature.visualParams?.secondaryColor }}>
+                          <input
+                            type="color"
+                            value={stagedCreature.visualParams?.secondaryColor || '#0E281E'}
+                            onChange={(e) => {
+                              const hex = e.target.value;
+                              setStagedCreature({
+                                ...stagedCreature,
+                                visualParams: {
+                                  ...stagedCreature.visualParams,
+                                  secondaryColor: hex,
+                                },
+                              });
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            title="Fine-tune secondary trim color"
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-white font-bold">{stagedCreature.visualParams?.secondaryColor}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Detected Photo Palette Chips */}
+                  {stagedCreature.visualParams?.topColors && stagedCreature.visualParams.topColors.length > 0 && (
+                    <div>
+                      <div className="text-[10px] text-[#6DAA8E] font-bold mb-1.5 flex items-center justify-between">
+                        <span>Tap any detected photo color to set Primary Armor:</span>
+                        <span className="text-[9px] text-emerald-400 font-normal">Instant 3D Preview</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {stagedCreature.visualParams.topColors.map((color, idx) => {
+                          const isPrimary = stagedCreature.visualParams?.primaryColor?.toUpperCase() === color.toUpperCase();
+                          const isSecondary = stagedCreature.visualParams?.secondaryColor?.toUpperCase() === color.toUpperCase();
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setStagedCreature({
+                                  ...stagedCreature,
+                                  visualParams: {
+                                    ...stagedCreature.visualParams,
+                                    primaryColor: color,
+                                  },
+                                });
+                              }}
+                              className={`px-2 py-1 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                isPrimary
+                                  ? 'border-[#2BE29E] bg-[#143B2C] text-white shadow-xs scale-105 ring-1 ring-[#2BE29E]'
+                                  : 'border-[#1C4D3A] bg-[#071610] text-[#6DAA8E] hover:border-white/40'
+                              }`}
+                            >
+                              <div className="w-3.5 h-3.5 rounded-full border border-white/40" style={{ backgroundColor: color }} />
+                              <span>{color}</span>
+                              {isPrimary && <span className="text-[9px] text-emerald-300 font-sans">Primary</span>}
+                              {isSecondary && !isPrimary && <span className="text-[9px] text-blue-300 font-sans">Trim</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Live 3D Staged Robot Preview Window */}
+                  <div className="rounded-xl bg-[#040C08] border border-[#143B2C] p-2 flex flex-col items-center">
+                    <div className="text-[10px] uppercase font-mono font-bold text-[#6DAA8E] mb-1 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Live 3D Robot Preview (Exact Shape & Color)</span>
+                    </div>
+                    <div
+                      ref={stagedCanvasRef}
+                      className="w-full h-44 rounded-lg overflow-hidden flex items-center justify-center relative"
+                    />
                   </div>
                 </div>
 
