@@ -263,6 +263,22 @@ export const ForgeScreen: React.FC<ForgeScreenProps> = ({ creature, onNavigateTa
                       );
                     })}
                   </div>
+
+                  {/* Per-Star Benefit and Current Bonus */}
+                  <div className="mt-2.5 pt-2 border-t border-[#133327] flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-[#8BBFA2]">
+                      {tile.id === 'alloy_armor' && '+100 HP / star'}
+                      {tile.id === 'energon_overdrive' && '+1.0/s Fire Rate / star'}
+                      {tile.id === 'special_core' && '+10 Special / star'}
+                      {tile.id === 'impact_amplifier' && '+20 Damage / star'}
+                    </span>
+                    <span className="font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
+                      {tile.id === 'alloy_armor' && `+${currentStars * 100} HP on Main Page`}
+                      {tile.id === 'energon_overdrive' && `+${(currentStars * 1.0).toFixed(1)}/s Fire Rate`}
+                      {tile.id === 'special_core' && `+${currentStars * 10} Special Dmg`}
+                      {tile.id === 'impact_amplifier' && `+${currentStars * 20} Damage`}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Cost Label */}

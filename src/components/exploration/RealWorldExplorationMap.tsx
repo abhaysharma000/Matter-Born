@@ -19,8 +19,16 @@ import {
   Radio,
   Footprints,
   Eye,
+  Users,
+  UserPlus,
+  Swords,
+  Check,
+  X,
 } from 'lucide-react';
-import { formatExplorationDistance } from '../../utils/geoUtils';
+import { formatExplorationDistance, calculateHaversineDistance } from '../../utils/geoUtils';
+import { PlayerPresence } from '../../types/multiplayer';
+import { multiplayerManager } from '../../utils/multiplayerManager';
+import { sound } from '../../utils/audio';
 
 export interface RealWorldExplorationMapProps {
   origin: ExplorationOrigin | null;
@@ -33,6 +41,9 @@ export interface RealWorldExplorationMapProps {
   gpsStatus?: string;
   nextMilestoneTitle?: string;
   nextMilestoneDistance?: number;
+  nearbyPlayers?: PlayerPresence[];
+  onAddFriend?: (player: PlayerPresence) => void;
+  onChallengePlayer?: (player: PlayerPresence) => void;
   onSelectZone?: (zone: DiscoveryZone) => void;
   onBackToLobby?: () => void;
   className?: string;
@@ -51,6 +62,8 @@ export const OPENSTREETMAP_CONFIG = {
   maxNativeZoom: 19,
   minZoom: 2,
 };
+
+
 
 /**
  * Creates custom HTML Leaflet DivIcons matching the Matter Born / Animatrix theme.
@@ -82,10 +95,10 @@ function createPlayerIcon(heading: number = 0): L.DivIcon {
     html: `
       <div class="flex flex-col items-center select-none" style="transform: translate(-50%, -50%);">
         <div class="px-2 py-0.5 rounded-md bg-sky-950/95 border border-sky-400 text-[10px] font-black text-sky-300 shadow-md tracking-wider uppercase whitespace-nowrap mb-1 text-center">
-          🔵 PLAYER
+          🔵 YOU ARE HERE
         </div>
         <div class="relative flex items-center justify-center">
-          <div class="w-12 h-12 rounded-full bg-sky-500/25 animate-pulse absolute"></div>
+          <div class="w-12 h-12 rounded-full bg-sky-500/25 animate-ping absolute"></div>
           <div class="w-7 h-7 rounded-full bg-white border-2 border-sky-600 shadow-xl flex items-center justify-center relative">
             <div class="w-4 h-4 rounded-full bg-sky-600 flex items-center justify-center" style="transform: rotate(${heading}deg);">
               <svg class="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11" fill="currentColor"/></svg>
@@ -99,34 +112,37 @@ function createPlayerIcon(heading: number = 0): L.DivIcon {
   });
 }
 
-function createDiscoveryIcon(
-  zone: DiscoveryZone,
-  isReached: boolean
-): L.DivIcon {
-  const accentColor = isReached ? '#F59E0B' : zone.accentColor;
+function createRemotePlayerIcon(player: PlayerPresence, isFriend: boolean): L.DivIcon {
+  const isAutobot = player.faction === 'Autobot';
+  const factionColor = isAutobot ? '#06b6d4' : '#f43f5e';
+  const badgeColor = isFriend 
+    ? 'border-emerald-400 text-emerald-100 bg-emerald-950/95 ring-2 ring-emerald-400/80 shadow-[0_0_15px_rgba(16,185,129,0.7)]' 
+    : 'border-emerald-400 text-emerald-300 bg-stone-950/95';
+  const badgeTitle = isFriend ? '⭐ FRIEND' : '⚔️ PILOT';
+  const statusColor = player.status === 'in-battle' ? '#ef4444' : player.status === 'exploring' ? '#10b981' : '#3b82f6';
+
   return L.divIcon({
-    className: 'custom-leaflet-icon',
+    className: 'custom-leaflet-icon remote-player-radar-beacon',
     html: `
-      <div class="flex flex-col items-center select-none cursor-pointer group" style="transform: translate(-50%, -100%);">
-        <div class="px-2 py-0.5 rounded-md text-[9px] font-black border shadow-md whitespace-nowrap text-center transition-transform group-hover:scale-105 ${
-          isReached
-            ? 'bg-amber-400 text-amber-950 border-amber-300 ring-2 ring-amber-400/50'
-            : 'bg-emerald-950/90 text-emerald-200 border-emerald-600/70'
-        }">
-          ⭐ Discovery (${zone.milestoneDistance}m)
+      <div onclick="window.dispatchEvent(new CustomEvent('select_remote_player', { detail: '${player.id}' }))" class="flex flex-col items-center select-none cursor-pointer pointer-events-auto" style="transform: translate(-50%, -50%);">
+        <div class="px-2.5 py-1 rounded-md border ${badgeColor} text-[10px] font-black shadow-lg tracking-wider uppercase whitespace-nowrap mb-1 text-center flex items-center gap-1.5 backdrop-blur-sm">
+          <span class="${isFriend ? 'text-amber-300 animate-pulse font-bold' : ''}">${badgeTitle}</span>
+          <span class="text-white">${player.name}</span>
         </div>
-        <div class="relative mt-1 flex items-center justify-center">
-          ${isReached ? '<div class="w-8 h-8 rounded-full bg-amber-400/35 animate-ping absolute"></div>' : ''}
-          <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold border-2 border-white shadow-lg transition-transform group-hover:scale-110" style="background-color: ${accentColor};">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6.4-4.8-6.4 4.8 2.4-7.2-6-4.8h7.6z"/></svg>
+        <div class="relative flex items-center justify-center">
+          <div class="w-12 h-12 rounded-full animate-ping absolute" style="background-color: ${isFriend ? '#10b98144' : statusColor + '33'};"></div>
+          <div class="w-9 h-9 rounded-full bg-stone-900 border-2 shadow-xl flex items-center justify-center relative ${isFriend ? 'border-emerald-400 ring-2 ring-emerald-500/50' : ''}" style="${!isFriend ? `border-color: ${factionColor};` : ''}">
+            <span class="text-sm">${isFriend ? '⭐' : '🤖'}</span>
           </div>
         </div>
       </div>
     `,
-    iconSize: [0, 0],
-    iconAnchor: [0, 0],
+    iconSize: [80, 80],
+    iconAnchor: [40, 40],
   });
 }
+
+// Discovery stars removed from map per user request
 
 export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = ({
   origin,
@@ -139,6 +155,9 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
   gpsStatus = 'GPS READY',
   nextMilestoneTitle,
   nextMilestoneDistance,
+  nearbyPlayers = [],
+  onAddFriend,
+  onChallengePlayer,
   onSelectZone,
   onBackToLobby,
   className = '',
@@ -146,6 +165,10 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const remotePlayersMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerPresence | null>(null);
+  const [friendToast, setFriendToast] = useState<string | null>(null);
 
   // Marker references for efficient imperative updates
   const startMarkerRef = useRef<L.Marker | null>(null);
@@ -256,6 +279,8 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         rangeRingsRef.current.forEach((r) => r.remove());
         rangeRingsRef.current = [];
         discoveryMarkersRef.current.clear();
+        remotePlayersMarkersRef.current.forEach((m) => m.remove());
+        remotePlayersMarkersRef.current.clear();
         breadcrumbPolylineRef.current = null;
       }
     };
@@ -267,6 +292,61 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
     const latLngs: L.LatLngExpression[] = breadcrumbs.map((b) => [b.lat, b.lng]);
     breadcrumbPolylineRef.current.setLatLngs(latLngs);
   }, [breadcrumbs]);
+
+  // Sync Remote Teammates & Nearby Players on OpenStreetMap
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const activeIds = new Set<string>();
+
+    (nearbyPlayers || []).forEach((player) => {
+      activeIds.add(player.id);
+      const isFriend = Boolean(player.isFriend || multiplayerManager.isFriend(player.id));
+      const latLng: [number, number] = [player.latitude, player.longitude];
+
+      let marker = remotePlayersMarkersRef.current.get(player.id);
+      if (!marker) {
+        marker = L.marker(latLng, {
+          icon: createRemotePlayerIcon(player, isFriend),
+          zIndexOffset: 350,
+        }).addTo(map);
+
+        marker.on('click', () => {
+          sound.playClick();
+          setSelectedPlayer(player);
+        });
+
+        remotePlayersMarkersRef.current.set(player.id, marker);
+      } else {
+        marker.setLatLng(latLng);
+        marker.setIcon(createRemotePlayerIcon(player, isFriend));
+      }
+    });
+
+    // Remove inactive markers
+    for (const [id, marker] of remotePlayersMarkersRef.current.entries()) {
+      if (!activeIds.has(id)) {
+        marker.remove();
+        remotePlayersMarkersRef.current.delete(id);
+      }
+    }
+  }, [nearbyPlayers]);
+
+  // Handle remote player click via custom event
+  useEffect(() => {
+    const handleSelectRemote = (e: Event) => {
+      const custom = e as CustomEvent<string>;
+      const pId = custom.detail;
+      const target = (nearbyPlayers || []).find((p) => p.id === pId);
+      if (target) {
+        sound.playClick();
+        setSelectedPlayer(target);
+      }
+    };
+    window.addEventListener('select_remote_player', handleSelectRemote);
+    return () => window.removeEventListener('select_remote_player', handleSelectRemote);
+  }, [nearbyPlayers]);
 
   // Update Start / Origin Marker & Indoor Building Range Rings
   useEffect(() => {
@@ -371,58 +451,24 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       }
 
       // Camera follow logic
-      if (isFollowMode) {
-        map.panTo(latLng, { animate: true, duration: 0.4 });
-      }
-
-      if (!isInitialCenteringDone.current) {
-        map.setView(latLng, 19);
+      if (isFollowMode || !isInitialCenteringDone.current) {
+        map.setView(latLng, 18, { animate: true });
+        map.invalidateSize();
         isInitialCenteringDone.current = true;
       }
     }
   }, [currentLocation, isFollowMode]);
 
-  // Update Discovery Zone Markers
+  // Discovery star markers removed per user request (clean map view)
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
     const currentMap = discoveryMarkersRef.current;
-    const activeZoneIds = new Set(discoveryZones.map((z) => z.id));
-
-    // Remove obsolete markers
-    for (const [id, marker] of currentMap.entries()) {
-      if (!activeZoneIds.has(id)) {
-        marker.remove();
-        currentMap.delete(id);
-      }
+    for (const [, marker] of currentMap.entries()) {
+      marker.remove();
     }
+    currentMap.clear();
+  }, [discoveryZones]);
 
-    // Add or update markers
-    discoveryZones.forEach((zone) => {
-      const latLng: [number, number] = [zone.latitude, zone.longitude];
-      const isReached = distanceExplored >= zone.milestoneDistance;
 
-      let marker = currentMap.get(zone.id);
-      if (!marker) {
-        marker = L.marker(latLng, {
-          icon: createDiscoveryIcon(zone, isReached),
-          zIndexOffset: isReached ? 250 : 200,
-        }).addTo(map);
-
-        marker.on('click', () => {
-          setSelectedZone(zone);
-          if (onSelectZone) onSelectZone(zone);
-        });
-
-        currentMap.set(zone.id, marker);
-      } else {
-        marker.setLatLng(latLng);
-        marker.setIcon(createDiscoveryIcon(zone, isReached));
-        marker.setZIndexOffset(isReached ? 250 : 200);
-      }
-    });
-  }, [discoveryZones, distanceExplored, onSelectZone]);
 
   // Recenter handler
   const handleRecenter = useCallback(() => {
@@ -430,16 +476,55 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
     if (!map) return;
 
     if (currentLocation) {
-      map.setView([currentLocation.latitude, currentLocation.longitude], 20, { animate: true });
+      map.setView([currentLocation.latitude, currentLocation.longitude], 18, { animate: true });
       setIsFollowMode(true);
-    } else if (origin) {
-      map.setView([origin.latitude, origin.longitude], 19, { animate: true });
-      setIsFollowMode(true);
+      setRecenterToast('Map centered on your location');
+      setTimeout(() => setRecenterToast(null), 1800);
+      return;
     }
-    setRecenterToast('Map centered on player (High Precision View)');
-    setTimeout(() => {
-      setRecenterToast(null);
-    }, 1800);
+
+    if (origin) {
+      map.setView([origin.latitude, origin.longitude], 18, { animate: true });
+      setIsFollowMode(true);
+      setRecenterToast('Map centered on expedition origin');
+      setTimeout(() => setRecenterToast(null), 1800);
+      return;
+    }
+
+    // Actively query device location if not yet received
+    if (navigator.geolocation) {
+      setRecenterToast('Locating your position...');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          map.setView([pos.coords.latitude, pos.coords.longitude], 18, { animate: true });
+          setIsFollowMode(true);
+          setRecenterToast('Location acquired!');
+          setTimeout(() => setRecenterToast(null), 1800);
+        },
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) {
+            setRecenterToast('Location permission denied in browser');
+          } else {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                map.setView([pos.coords.latitude, pos.coords.longitude], 18, { animate: true });
+                setIsFollowMode(true);
+                setRecenterToast('Location acquired!');
+                setTimeout(() => setRecenterToast(null), 1800);
+              },
+              () => {
+                setRecenterToast('Unable to detect location. Please check browser permissions.');
+                setTimeout(() => setRecenterToast(null), 2500);
+              },
+              { enableHighAccuracy: false, timeout: 10000 }
+            );
+            return;
+          }
+          setTimeout(() => setRecenterToast(null), 2500);
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
+    }
   }, [currentLocation, origin]);
 
   return (
@@ -489,17 +574,42 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       )}
 
       {/* 4. Top Floating Navigation & Telemetry Bar (Zero overlaps) */}
-      <div className="absolute top-3 left-3 right-3 pointer-events-none flex items-center justify-between gap-2 z-10">
+      <div className="absolute top-3 left-3 right-3 pointer-events-none flex flex-wrap items-center justify-between gap-2 z-10">
         {/* Left: GPS Live Telemetry Status Badge */}
-        <div className="pointer-events-auto px-3 py-1.5 rounded-xl bg-[#0E1B13]/90 backdrop-blur-md border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2 shadow-lg">
-          <div className={`w-2 h-2 rounded-full ${gpsStatus === 'GPS DENIED' ? 'bg-rose-400' : 'bg-emerald-400 animate-ping'}`} />
-          <span className="font-mono font-bold tracking-wider text-[11px]">
-            {gpsStatus === 'GPS DENIED' ? 'GPS OFFLINE' : 'LIVE GPS'}
-          </span>
-          {currentLocation && (
-            <span className="text-[10px] text-emerald-400 font-mono hidden sm:inline border-l border-emerald-800 pl-2">
-              ±{Math.round(currentLocation.accuracy)}m
+        <div className="pointer-events-auto flex items-center gap-1.5">
+          <div className="px-3 py-1.5 rounded-xl bg-[#0E1B13]/90 backdrop-blur-md border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2 shadow-lg">
+            <div
+              className={`w-2 h-2 rounded-full ${
+                gpsStatus === 'GPS DENIED'
+                  ? 'bg-rose-400'
+                  : !currentLocation
+                  ? 'bg-amber-400 animate-ping'
+                  : 'bg-emerald-400 animate-ping'
+              }`}
+            />
+            <span className="font-mono font-bold tracking-wider text-[11px]">
+              {gpsStatus === 'GPS DENIED'
+                ? 'GPS OFFLINE'
+                : !currentLocation
+                ? 'ACQUIRING GPS...'
+                : 'LIVE GPS'}
             </span>
+            {currentLocation && (
+              <span className="text-[10px] text-emerald-400 font-mono hidden sm:inline border-l border-emerald-800 pl-2">
+                ±{Math.round(currentLocation.accuracy)}m
+              </span>
+            )}
+          </div>
+
+          {nearbyPlayers.length > 0 && (
+            <div className="px-2.5 py-1.5 rounded-xl bg-[#0E1B13]/90 backdrop-blur-md border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center gap-1.5 shadow-lg animate-in fade-in">
+              <Users className="w-3.5 h-3.5 text-emerald-400" />
+              <span>
+                {nearbyPlayers.some(p => p.isFriend || multiplayerManager.isFriend(p.id))
+                  ? `${nearbyPlayers.filter(p => p.isFriend || multiplayerManager.isFriend(p.id)).length} Friend(s) on Map`
+                  : `${nearbyPlayers.length} Pilots Nearby`}
+              </span>
+            </div>
           )}
         </div>
 
@@ -619,52 +729,116 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         </div>
       </div>
 
-      {/* 6. Selected Discovery Zone Modal Card */}
-      {selectedZone && (
-        <div className="absolute inset-x-4 top-16 z-20 p-3.5 rounded-xl bg-[#08120B]/95 backdrop-blur-md border border-emerald-400 shadow-2xl text-white max-w-sm mx-auto">
-          <div className="flex items-center justify-between gap-2 border-b border-emerald-800 pb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-amber-400 text-sm">⭐</span>
+      {/* Interactive Nearby Player Dossier Modal (Add to Friend List & Challenge) */}
+      {selectedPlayer && (
+        <div className="absolute inset-x-3 bottom-3 z-30 p-4 rounded-2xl bg-[#091E16]/95 backdrop-blur-md border border-emerald-500/50 shadow-2xl text-white animate-in slide-in-from-bottom duration-200">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-stone-900 border-2 border-emerald-400 flex items-center justify-center text-xl shadow-md">
+                🤖
+              </div>
               <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-black text-xs text-emerald-300 uppercase">
-                    {selectedZone.codename}
+                <div className="flex items-center gap-2">
+                  <h4 className="font-black text-base text-white">{selectedPlayer.name}</h4>
+                  <span className="text-[10px] font-black uppercase px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    Lv. {selectedPlayer.level}
                   </span>
-                  <span className="px-1.5 py-0.2 rounded bg-emerald-900 text-emerald-200 text-[9px] font-bold">
-                    {selectedZone.tier}
+                  <span className="text-[10px] font-black uppercase px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                    {selectedPlayer.faction}
                   </span>
                 </div>
-                <h4 className="font-bold text-xs text-white">{selectedZone.title}</h4>
+                <div className="text-xs text-[#8BA996] flex items-center gap-2 mt-0.5">
+                  <span className="font-bold text-white">{selectedPlayer.robotName}</span>
+                  <span>•</span>
+                  <span>{selectedPlayer.robotClass}</span>
+                  {currentLocation && (
+                    <>
+                      <span>•</span>
+                      <span className="text-amber-300 font-mono font-bold">
+                        📍 {formatExplorationDistance(calculateHaversineDistance(
+                          currentLocation.latitude,
+                          currentLocation.longitude,
+                          selectedPlayer.latitude,
+                          selectedPlayer.longitude
+                        ))} away
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
+
             <button
-              onClick={() => setSelectedZone(null)}
-              className="text-stone-400 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+              id="dossier-close-btn"
+              onClick={() => setSelectedPlayer(null)}
+              className="p-1.5 rounded-lg bg-[#0E2A1F] hover:bg-[#153D2D] text-stone-400 hover:text-white transition-colors cursor-pointer"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
 
-          <p className="text-[11px] text-stone-300 mt-2 leading-tight">
-            {selectedZone.bonusDescription}
-          </p>
+          {/* Action Buttons */}
+          <div className="grid grid-cols-2 gap-2 mt-3.5 pt-3 border-t border-[#184635]">
+            <button
+              id="dossier-add-friend-btn"
+              onClick={async () => {
+                sound.playBonus();
+                multiplayerManager.addFriend(selectedPlayer);
+                multiplayerManager.sendFriendRequest(selectedPlayer.id);
+                if (onAddFriend) onAddFriend(selectedPlayer);
+                setFriendToast(`✓ Friend request sent to ${selectedPlayer.name}!`);
+                setTimeout(() => setFriendToast(null), 3500);
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md ${
+                multiplayerManager.isFriend(selectedPlayer.id)
+                  ? 'bg-emerald-900/60 border border-emerald-400/50 text-emerald-300'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95'
+              }`}
+            >
+              {multiplayerManager.isFriend(selectedPlayer.id) ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>In Friend List</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Add to Friend List</span>
+                </>
+              )}
+            </button>
 
-          <div className="mt-2.5 pt-2 border-t border-emerald-900 flex items-center justify-between text-[11px]">
-            <span className="text-stone-400">Target Distance:</span>
-            <span className="font-bold text-emerald-300 font-mono">
-              {selectedZone.milestoneDistance} m
-            </span>
-          </div>
+            <button
+              id="dossier-challenge-btn"
+              onClick={async () => {
+                sound.playClick();
+                setFriendToast(`⚔️ Sending battle challenge to ${selectedPlayer.name}...`);
+                const challengeRes = await multiplayerManager.sendBattleInvite(selectedPlayer.id, 'classic');
+                const roomCode = challengeRes.roomCode || `MATE-${Math.floor(1000 + Math.random() * 9000)}`;
+                setFriendToast(`⚔️ Challenge sent to ${selectedPlayer.name}! Room ${roomCode}`);
+                setTimeout(() => setFriendToast(null), 4000);
 
-          <div className="mt-2 text-[10px] font-bold text-center py-1 rounded bg-emerald-950/80 border border-emerald-600/40 text-emerald-300">
-            {distanceExplored >= selectedZone.milestoneDistance
-              ? isStationary
-                ? '✅ ZONE REACHED • SCAN OBJECT READY'
-                : '⚠️ ZONE REACHED • STOP SAFELY TO SCAN'
-              : `WALK ${Math.max(0, selectedZone.milestoneDistance - distanceExplored)}M FURTHER TO UNLOCK`}
+                if (onChallengePlayer) {
+                  onChallengePlayer(selectedPlayer);
+                }
+              }}
+              className="py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-stone-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+            >
+              <Swords className="w-3.5 h-3.5" />
+              <span>Challenge to Battle</span>
+            </button>
           </div>
         </div>
       )}
+
+      {/* Friend Added Feedback Toast */}
+      {friendToast && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-xl bg-emerald-950/95 border border-emerald-400 text-emerald-300 text-xs font-black shadow-2xl flex items-center gap-2 animate-in fade-in">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{friendToast}</span>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -786,38 +960,8 @@ export const TacticalRadarMap: React.FC<{
           </text>
         </g>
 
-        {/* Discovery Zones */}
-        {discoveryZones.map((zone) => {
-          const pos = toSvgCoords(zone.latitude, zone.longitude);
-          const isReached = distanceExplored >= zone.milestoneDistance;
-          return (
-            <g
-              key={zone.id}
-              transform={`translate(${pos.x}, ${pos.y})`}
-              className="cursor-pointer group"
-              onClick={() => onSelectZone && onSelectZone(zone)}
-            >
-              <circle
-                r={isReached ? 14 : 10}
-                fill={isReached ? '#F59E0B' : zone.accentColor}
-                fillOpacity={isReached ? 0.35 : 0.2}
-                stroke={isReached ? '#FBBF24' : zone.accentColor}
-                strokeWidth="2"
-              />
-              <circle r="4" fill={isReached ? '#F59E0B' : zone.accentColor} />
-              <text
-                y="-14"
-                textAnchor="middle"
-                fill={isReached ? '#FDE68A' : '#D1FAE5'}
-                fontSize="9"
-                fontFamily="sans-serif"
-                fontWeight="bold"
-              >
-                ⭐ Discovery ({zone.milestoneDistance}m)
-              </text>
-            </g>
-          );
-        })}
+
+
 
         {/* Player Locator */}
         <g transform={`translate(${playerPos.x}, ${playerPos.y})`}>

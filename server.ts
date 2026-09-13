@@ -11,6 +11,17 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Enable CORS for mobile devices connecting over Wi-Fi / LAN
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Middleware for large payload (e.g. base64 photo capture from camera)
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
@@ -18,6 +29,504 @@ app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 // Health check endpoint
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });
+});
+
+// IP Geolocation fallback endpoint for devices without hardware GPS (e.g. desktops/laptops)
+app.get("/api/ip-location", async (_req, res) => {
+  try {
+    const response = await fetch("https://ipwho.is/");
+    const data = (await response.json()) as any;
+    if (data && data.latitude && data.longitude) {
+      return res.json({
+        success: true,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        city: data.city || "",
+        region: data.region || "",
+        country: data.country || "",
+      });
+    }
+  } catch (err) {
+    console.warn("IP geolocation fallback note:", err);
+  }
+  res.json({ success: false });
+});
+
+// ============================================================================
+// MULTIPLAYER PRESENCE & ROOM SYNCHRONIZATION BACKEND
+// ============================================================================
+
+interface ServerPlayerPresence {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  heading?: number;
+  level: number;
+  rankTier: string;
+  robotName: string;
+  robotClass: string;
+  faction: 'Autobot' | 'Decepticon';
+  status: 'exploring' | 'in-room' | 'in-battle' | 'online';
+  lastSeen: number;
+}
+
+const activePresenceMap = new Map<string, ServerPlayerPresence>();
+const activeRoomsMap = new Map<string, any>();
+const roomCombatPackets = new Map<string, Map<string, any>>();
+const roomDamageEvents = new Map<string, any[]>();
+
+// 1. Presence Heartbeat
+app.post("/api/multiplayer/presence/heartbeat", (req, res) => {
+  const presence = req.body as ServerPlayerPresence;
+  if (!presence || !presence.id) {
+    return res.status(400).json({ error: "Invalid presence payload" });
+  }
+
+  presence.lastSeen = Date.now();
+  activePresenceMap.set(presence.id, presence);
+
+  // Prune players inactive for > 45 seconds
+  const now = Date.now();
+  for (const [id, p] of activePresenceMap.entries()) {
+    if (now - p.lastSeen > 45000) {
+      activePresenceMap.delete(id);
+    }
+  }
+
+  res.json({ success: true, activeCount: activePresenceMap.size });
+});
+
+// 2. Get Active Players for Real Map
+app.get("/api/multiplayer/presence/active", (_req, res) => {
+  const now = Date.now();
+  const activePlayers: ServerPlayerPresence[] = [];
+
+  for (const [id, p] of activePresenceMap.entries()) {
+    if (now - p.lastSeen <= 45000) {
+      activePlayers.push(p);
+    } else {
+      activePresenceMap.delete(id);
+    }
+  }
+
+  res.json({ success: true, players: activePlayers });
+});
+
+// Search pilot by ID or Gamer Tag across Wi-Fi presence
+app.get("/api/multiplayer/pilot/search", (req, res) => {
+  const query = (req.query.query as string || "").trim().toLowerCase();
+  if (!query) {
+    return res.status(400).json({ error: "Missing search query" });
+  }
+
+  const now = Date.now();
+  for (const [id, p] of activePresenceMap.entries()) {
+    if (now - p.lastSeen <= 60000) {
+      if (id.toLowerCase() === query || p.name.toLowerCase().includes(query)) {
+        return res.json({ success: true, player: p });
+      }
+    }
+  }
+
+  res.json({ success: false, message: "Pilot not found on Wi-Fi" });
+});
+
+// --------------------------------------------------------------------------
+// FRIEND REQUESTS & BATTLE CHALLENGE INBOX (WI-FI LAN SYNC)
+// --------------------------------------------------------------------------
+interface ServerFriendRequest {
+  id: string;
+  fromPilotId: string;
+  fromName: string;
+  fromRobotName: string;
+  fromRobotClass?: string;
+  fromFaction?: string;
+  fromLevel: number;
+  toPilotId: string;
+  timestamp: number;
+  status: 'pending' | 'accepted' | 'declined';
+  acceptedAt?: number;
+  recipientPilot?: any;
+}
+
+interface ServerBattleInvite {
+  id: string;
+  roomId: string;
+  roomCode: string;
+  roomName: string;
+  fromPilotId: string;
+  fromName: string;
+  fromRobotName: string;
+  fromLevel: number;
+  toPilotId: string;
+  mode: string;
+  timestamp: number;
+  status: 'pending' | 'accepted' | 'declined';
+}
+
+const serverFriendRequests: ServerFriendRequest[] = [];
+const serverBattleInvites: ServerBattleInvite[] = [];
+
+// Send Friend Request
+app.post("/api/multiplayer/friend-request/send", (req, res) => {
+  const { fromPilot, toPilotId } = req.body;
+  if (!fromPilot || !fromPilot.id || !toPilotId) {
+    return res.status(400).json({ error: "Missing fromPilot or toPilotId" });
+  }
+
+  const cleanToId = String(toPilotId).trim();
+  const cleanFromId = String(fromPilot.id).trim();
+
+  if (cleanToId.toLowerCase() === cleanFromId.toLowerCase()) {
+    return res.status(400).json({ error: "Cannot send friend request to yourself" });
+  }
+
+  // Remove any stale pending request between these two
+  const existingIdx = serverFriendRequests.findIndex(
+    r => r.fromPilotId.toLowerCase() === cleanFromId.toLowerCase() &&
+         r.toPilotId.toLowerCase() === cleanToId.toLowerCase() &&
+         r.status === 'pending'
+  );
+  if (existingIdx >= 0) {
+    serverFriendRequests.splice(existingIdx, 1);
+  }
+
+  const newRequest: ServerFriendRequest = {
+    id: `freq-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+    fromPilotId: cleanFromId,
+    fromName: fromPilot.name || 'Anonymous Pilot',
+    fromRobotName: fromPilot.robotName || 'Combat Mech',
+    fromRobotClass: fromPilot.robotClass || 'Warrior',
+    fromFaction: fromPilot.faction || 'Autobot',
+    fromLevel: fromPilot.level || 1,
+    toPilotId: cleanToId,
+    timestamp: Date.now(),
+    status: 'pending',
+  };
+
+  serverFriendRequests.push(newRequest);
+  console.log(`[Friend Request] Sent from ${newRequest.fromName} (${cleanFromId}) -> ${cleanToId}`);
+
+  res.json({ success: true, request: newRequest });
+});
+
+// Single Consolidated Polling Inbox: Friend Requests + Battle Invites + Accepted Confirmations
+app.get("/api/multiplayer/inbox/:pilotId", (req, res) => {
+  const pid = (req.params.pilotId || "").trim().toLowerCase();
+  if (!pid) {
+    return res.status(400).json({ error: "Missing pilotId" });
+  }
+
+  const now = Date.now();
+
+  // 1. Pending incoming friend requests for this pilot
+  const incomingFriendRequests = serverFriendRequests.filter(
+    r => r.toPilotId.toLowerCase() === pid && r.status === 'pending' && now - r.timestamp < 120000
+  );
+
+  // 2. Pending battle invites for this pilot (< 45 seconds old)
+  const incomingBattleInvites = serverBattleInvites.filter(
+    i => i.toPilotId.toLowerCase() === pid && i.status === 'pending' && now - i.timestamp < 45000
+  );
+
+  // 3. Accepted friend requests sent BY this pilot (so sender's friend list updates immediately!)
+  const acceptedOutbox = serverFriendRequests.filter(
+    r => r.fromPilotId.toLowerCase() === pid &&
+         r.status === 'accepted' &&
+         r.acceptedAt &&
+         now - r.acceptedAt < 45000
+  );
+
+  res.json({
+    success: true,
+    incomingFriendRequests,
+    incomingBattleInvites,
+    acceptedOutbox,
+    timestamp: now,
+  });
+});
+
+// Respond to Friend Request (Accept / Decline)
+app.post("/api/multiplayer/friend-request/respond", (req, res) => {
+  const { requestId, response, myPilot } = req.body;
+  if (!requestId || !response) {
+    return res.status(400).json({ error: "Missing requestId or response" });
+  }
+
+  const reqItem = serverFriendRequests.find(r => r.id === requestId);
+  if (!reqItem) {
+    return res.status(404).json({ error: "Friend request not found or expired" });
+  }
+
+  reqItem.status = response === 'accept' ? 'accepted' : 'declined';
+  reqItem.acceptedAt = Date.now();
+  if (myPilot) {
+    reqItem.recipientPilot = myPilot;
+  }
+
+  console.log(`[Friend Request] ${requestId} marked as ${reqItem.status}`);
+  res.json({ success: true, request: reqItem });
+});
+
+// Send Battle Challenge Invite
+app.post("/api/multiplayer/battle-invite/send", (req, res) => {
+  const { fromPilot, toPilotId, roomId, roomCode, roomName, mode } = req.body;
+  if (!fromPilot || !toPilotId || !roomCode) {
+    return res.status(400).json({ error: "Missing required battle invite fields" });
+  }
+
+  const cleanToId = String(toPilotId).trim();
+  const cleanFromId = String(fromPilot.id).trim();
+
+  // Create room in active rooms map if not already present
+  if (!activeRoomsMap.has(roomCode)) {
+    activeRoomsMap.set(roomCode, {
+      code: roomCode,
+      name: roomName || `${fromPilot.name}'s Duel`,
+      mode: mode || 'classic',
+      hostId: cleanFromId,
+      players: [
+        {
+          id: cleanFromId,
+          name: fromPilot.name,
+          isHost: true,
+          ping: 10,
+        }
+      ],
+      currentPlayers: 1,
+      maxPlayers: 2,
+      isPrivate: true,
+      status: 'waiting',
+      createdAt: Date.now(),
+    });
+    roomCombatPackets.set(roomCode, new Map());
+    roomDamageEvents.set(roomCode, []);
+  }
+
+  const newInvite: ServerBattleInvite = {
+    id: `binv-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+    roomId: roomId || roomCode,
+    roomCode,
+    roomName: roomName || `1v1 vs ${fromPilot.name}`,
+    fromPilotId: cleanFromId,
+    fromName: fromPilot.name || 'Challenger',
+    fromRobotName: fromPilot.robotName || 'Battle Mech',
+    fromLevel: fromPilot.level || 1,
+    toPilotId: cleanToId,
+    mode: mode || 'classic',
+    timestamp: Date.now(),
+    status: 'pending',
+  };
+
+  serverBattleInvites.push(newInvite);
+  console.log(`[Battle Invite] ${newInvite.fromName} challenged ${cleanToId} to room ${roomCode}`);
+
+  res.json({ success: true, invite: newInvite });
+});
+
+// Respond to Battle Challenge Invite (Accept / Decline)
+app.post("/api/multiplayer/battle-invite/respond", (req, res) => {
+  const { inviteId, response } = req.body;
+  if (!inviteId || !response) {
+    return res.status(400).json({ error: "Missing inviteId or response" });
+  }
+
+  const invItem = serverBattleInvites.find(i => i.id === inviteId);
+  if (!invItem) {
+    return res.status(404).json({ error: "Battle invite not found or expired" });
+  }
+
+  invItem.status = response === 'accept' ? 'accepted' : 'declined';
+  console.log(`[Battle Invite] ${inviteId} status updated to ${invItem.status}`);
+
+  res.json({ success: true, invite: invItem });
+});
+
+// --------------------------------------------------------------------------
+// Real-Time LAN Player Presence & GPS Radar Sync
+// --------------------------------------------------------------------------
+const serverPlayerPresenceMap = new Map<string, any>();
+
+// Player Heartbeat / GPS broadcast
+app.post("/api/multiplayer/presence/heartbeat", (req, res) => {
+  const player = req.body;
+  if (!player || !player.id) {
+    return res.status(400).json({ error: "Missing player.id" });
+  }
+
+  serverPlayerPresenceMap.set(player.id, {
+    ...player,
+    lastSeen: Date.now(),
+  });
+
+  res.json({ success: true });
+});
+
+// Active Players on LAN
+app.get("/api/multiplayer/presence/active", (req, res) => {
+  const now = Date.now();
+  const activeList: any[] = [];
+
+  for (const [id, player] of serverPlayerPresenceMap.entries()) {
+    // Keep players seen within last 60 seconds
+    if (now - (player.lastSeen || 0) < 60000) {
+      activeList.push(player);
+    } else {
+      serverPlayerPresenceMap.delete(id);
+    }
+  }
+
+  res.json({ success: true, players: activeList });
+});
+
+// Search pilot
+app.get("/api/multiplayer/pilot/search", (req, res) => {
+  const query = String(req.query.query || "").trim().toLowerCase();
+  if (!query) {
+    return res.status(400).json({ error: "Missing query" });
+  }
+
+  for (const player of serverPlayerPresenceMap.values()) {
+    if (
+      player.id?.toLowerCase() === query ||
+      player.name?.toLowerCase().includes(query)
+    ) {
+      return res.json({ success: true, player });
+    }
+  }
+
+  res.json({ success: false, message: "Pilot not found" });
+});
+
+
+// 3. Create Room
+app.post("/api/multiplayer/rooms/create", (req, res) => {
+  const room = req.body;
+  if (!room || !room.code) {
+    return res.status(400).json({ error: "Missing room code" });
+  }
+
+  activeRoomsMap.set(room.code, room);
+  roomCombatPackets.set(room.code, new Map());
+  roomDamageEvents.set(room.code, []);
+
+  res.json({ success: true, room });
+});
+
+// 4. Join Room
+app.post("/api/multiplayer/rooms/join", (req, res) => {
+  const { code, member } = req.body;
+  if (!code || !member) {
+    return res.status(400).json({ error: "Missing code or member" });
+  }
+
+  const room = activeRoomsMap.get(code);
+  if (!room) {
+    // If room doesn't exist yet on server, create an ad-hoc room
+    const adHocRoom = {
+      code,
+      name: `${code} Match`,
+      hostId: member.id,
+      mode: 'easy',
+      maxPlayers: 8,
+      status: 'waiting',
+      createdAt: Date.now(),
+      botsEnabled: true,
+      players: [member],
+    };
+    activeRoomsMap.set(code, adHocRoom);
+    return res.json({ success: true, room: adHocRoom });
+  }
+
+  // Check if member already in room
+  const existingIdx = room.players.findIndex((p: any) => p.id === member.id);
+  if (existingIdx >= 0) {
+    room.players[existingIdx] = member;
+  } else {
+    room.players.push(member);
+  }
+
+  res.json({ success: true, room });
+});
+
+// 5. Get Room Details
+app.get("/api/multiplayer/rooms/:code", (req, res) => {
+  const room = activeRoomsMap.get(req.params.code);
+  if (!room) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+  res.json({ success: true, room });
+});
+
+// 6. Start Match
+app.post("/api/multiplayer/rooms/:code/start", (req, res) => {
+  const room = activeRoomsMap.get(req.params.code);
+  if (!room) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+  room.status = 'in-match';
+  res.json({ success: true, room });
+});
+
+// 7. Push Combat Packet
+app.post("/api/multiplayer/rooms/:code/packet", (req, res) => {
+  const code = req.params.code;
+  const packet = req.body;
+  if (!code || !packet || !packet.senderId) {
+    return res.status(400).json({ error: "Invalid combat packet" });
+  }
+
+  let packets = roomCombatPackets.get(code);
+  if (!packets) {
+    packets = new Map();
+    roomCombatPackets.set(code, packets);
+  }
+  packets.set(packet.senderId, packet);
+  res.json({ success: true });
+});
+
+// 8. Push Damage Event
+app.post("/api/multiplayer/rooms/:code/damage", (req, res) => {
+  const code = req.params.code;
+  const event = req.body;
+  if (!code || !event) {
+    return res.status(400).json({ error: "Invalid damage event" });
+  }
+
+  let events = roomDamageEvents.get(code);
+  if (!events) {
+    events = [];
+    roomDamageEvents.set(code, events);
+  }
+  events.push(event);
+  if (events.length > 50) events.shift();
+
+  res.json({ success: true });
+});
+
+// 9. Sync Combat State
+app.get("/api/multiplayer/rooms/:code/sync", (req, res) => {
+  const code = req.params.code;
+  const client = (req.query.client as string) || '';
+
+  const packetsMap = roomCombatPackets.get(code);
+  const packets: any[] = [];
+  if (packetsMap) {
+    for (const [id, pkt] of packetsMap.entries()) {
+      if (id !== client) {
+        packets.push(pkt);
+      }
+    }
+  }
+
+  const events = roomDamageEvents.get(code) || [];
+  // Clear events that are older than 2 seconds
+  const cutoff = Date.now() - 2000;
+  const freshEvents = events.filter((e: any) => (e.timestamp || 0) >= cutoff);
+  roomDamageEvents.set(code, freshEvents);
+
+  res.json({ success: true, packets, damageEvents: freshEvents });
 });
 
 // Lazy initialization of GoogleGenAI
@@ -1132,6 +1641,32 @@ function ensureStructuredObjectDna(
   creature.visualParams.roughnessFactor = vt.roughness;
   creature.visualParams.metallicFactor = vt.metallic;
 
+  // Real-world physical shape archetype for 3D transformer morphology
+  if (!creature.visualParams.shapeArchetype) {
+    const text = `${objName} ${vt.silhouette || ''} ${dna.visualIdentity?.shape || ''}`.toLowerCase();
+    if (
+      /bottle|flask|canister|thermos|cylinder|cylindrical|can\b|tumbler|mug|cup\b|tube|pipe|beaker|container|dispenser|shampoo|spray|deodorant|candle|vase|penn\b|pencil|marker/i.test(
+        text
+      )
+    ) {
+      creature.visualParams.shapeArchetype = 'cylinder';
+    } else if (
+      /sheet|slab|laptop|notebook|macbook|chromebook|tablet|ipad|phone|smartphone|screen|display|monitor|flatscreen|book|card|paper|board|clipboard|kindle|switch|deck/i.test(
+        text
+      )
+    ) {
+      creature.visualParams.shapeArchetype = 'sheet_slab';
+    } else if (
+      /sphere|spherical|round|ball|orb\b|globe|apple|orange|fruit|tomato|lemon|onion|melon|baseball|basketball|football|soccer|tennis|golf|marble|bulb|pearl|dome|circle|circular/i.test(
+        text
+      )
+    ) {
+      creature.visualParams.shapeArchetype = 'sphere_round';
+    } else {
+      creature.visualParams.shapeArchetype = 'cuboid_box';
+    }
+  }
+
   // 8. Causal Combat DNA 3.0: Physical Properties -> Gameplay Mechanics -> Combat Consequence
   const combatDna = creature.combatDna || creature.objectDna?.combatDna || deriveCombatDna(creature);
   creature.combatDna = combatDna;
@@ -2194,7 +2729,7 @@ Output strictly valid JSON matching the schema including the complete objectDna 
     parts.push({ text: textPrompt });
 
     // Cascading models: prioritize gemini-3.8-flash for highest multimodal vision accuracy
-    const candidateModels = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
+    const candidateModels = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-flash-latest"];
     let lastError: any = null;
     let creatureData: any = null;
 
@@ -2361,7 +2896,7 @@ Generate a dynamic Arena Hazard Mutation JSON for this real-world condition:
 }`;
 
     // Cascading models for high reliability during demand spikes
-    const candidateModels = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"];
+    const candidateModels = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-flash-latest"];
     let envData: any = null;
 
     for (const model of candidateModels) {
@@ -2460,7 +2995,7 @@ Player message: "${message}"
 
 Reply in character in 1-2 punchy, witty, battle-ready sentences. Mention your real-world object roots and how your material physics (ceramic, rubber, thorns, circuitry, etc.) make you dangerous in combat.`;
 
-    const candidateModels = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"];
+    const candidateModels = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-flash-latest"];
     let replyText = "";
 
     for (const model of candidateModels) {

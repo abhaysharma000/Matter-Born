@@ -104,12 +104,11 @@ export function validateGpsReading(
   newReading: GeoLocationReading,
   previousReading: GeoLocationReading | null
 ): GpsValidationResult {
-  // Check accuracy
   const isWeakSignal = newReading.accuracy > GPS_ACCURACY_THRESHOLD;
 
   if (!previousReading) {
     return {
-      isValid: !isWeakSignal,
+      isValid: true,
       isWeakSignal,
       isSuspiciousSpeed: false,
       effectiveSpeed: 0,
@@ -124,11 +123,12 @@ export function validateGpsReading(
     newReading.longitude
   );
 
-  const timeDeltaSec = Math.max(0.2, (newReading.timestamp - previousReading.timestamp) / 1000);
+  const timeDeltaSec = Math.max(0.4, (newReading.timestamp - previousReading.timestamp) / 1000);
   const calculatedSpeed = distanceDelta / timeDeltaSec;
-  const effectiveSpeed = newReading.speed !== null && newReading.speed !== undefined && newReading.speed >= 0
-    ? newReading.speed
-    : calculatedSpeed;
+  const effectiveSpeed =
+    newReading.speed !== null && newReading.speed !== undefined && newReading.speed >= 0
+      ? newReading.speed
+      : calculatedSpeed;
 
   const isSuspiciousSpeed = calculatedSpeed > MAX_REASONABLE_SPEED;
 
@@ -142,7 +142,8 @@ export function validateGpsReading(
     };
   }
 
-  if (isWeakSignal) {
+  // Only reject for weak signal if distance jump is also suspiciously large (> 35m)
+  if (isWeakSignal && distanceDelta > 35) {
     return {
       isValid: false,
       isWeakSignal: true,
@@ -154,7 +155,7 @@ export function validateGpsReading(
 
   return {
     isValid: true,
-    isWeakSignal: false,
+    isWeakSignal,
     isSuspiciousSpeed: false,
     effectiveSpeed,
   };

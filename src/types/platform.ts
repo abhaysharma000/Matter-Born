@@ -1,4 +1,5 @@
 import { SkinConfig, GameMode } from '../types';
+import { FriendProfile } from './multiplayer';
 
 export interface PlatformGame {
   id: string;
@@ -41,6 +42,7 @@ export interface GameRoom {
   ping: number;
   mapScale: 'Compact' | 'Standard' | 'Mega';
   botsEnabled: boolean;
+  friendFighters?: FriendProfile[];
 }
 
 export interface ShopItem {
@@ -83,6 +85,7 @@ export interface PlatformUser {
   peakTerritory: number;
   clanName?: string;
   clanTag?: string;
+  friends?: FriendProfile[];
   matchHistory: {
     id: string;
     gameTitle: string;

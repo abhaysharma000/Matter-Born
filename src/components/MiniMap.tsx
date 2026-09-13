@@ -97,16 +97,16 @@ export const MiniMap: React.FC<MiniMapProps> = ({ engine }) => {
   return (
     <div
       id="mini-map-container"
-      className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-xl overflow-hidden shadow-lg border-2 border-slate-700/80 bg-slate-900/90 backdrop-blur-sm pointer-events-none"
+      className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-xl border-2 border-emerald-500/50 bg-slate-950/95 backdrop-blur-md pointer-events-none"
     >
       <canvas
         ref={canvasRef}
         id="mini-map-canvas"
         width={140}
         height={140}
-        className="w-full h-full block"
+        className="w-full h-full block rounded-full"
       />
-      <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-slate-900/80 text-[10px] font-semibold text-slate-300">
+      <div className="absolute top-1 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full bg-slate-950/90 text-[8px] font-bold text-emerald-300 font-mono">
         RADAR
       </div>
     </div>

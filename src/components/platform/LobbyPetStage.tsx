@@ -225,9 +225,9 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
   const isDecepticon = creature.faction === 'Decepticon';
 
   return (
-    <div className="relative w-full rounded-3xl bg-[#091B14] border border-[#184635] p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-2xl">
+    <div className="relative w-full rounded-3xl bg-[#F4F8F5] border border-[#CBDED2] p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-xl">
       {/* Background ambient sci-fi glow */}
-      <div className="absolute inset-0 bg-radial from-emerald-500/10 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-radial from-emerald-500/8 via-transparent to-transparent pointer-events-none" />
       
       {/* Top Info Bar */}
       <div className="w-full flex items-center justify-between z-10">
@@ -235,23 +235,23 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
           {creature.faction && (
             <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${
               isDecepticon
-                ? 'bg-purple-950/80 text-purple-200 border border-purple-500/40'
-                : 'bg-emerald-950/80 text-emerald-200 border border-emerald-500/40'
+                ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
             }`}>
               {creature.faction}
             </span>
           )}
-          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#0E2A1F] text-emerald-300 border border-[#1E5C44] capitalize">
+          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#E2EFE5] text-[#0E3323] border border-[#B9D5C4] capitalize">
             {creature.element}
           </span>
         </div>
 
         <button
           onClick={onSnapNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-xs font-bold text-emerald-300 transition-colors cursor-pointer shadow-sm active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white transition-colors cursor-pointer shadow-sm active:scale-95"
           title="Snap a photo to morph a new robot"
         >
-          <Camera className="w-3.5 h-3.5 text-emerald-400" />
+          <Camera className="w-3.5 h-3.5 text-white" />
           <span>Scan New</span>
         </button>
       </div>
@@ -270,10 +270,10 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
               e.stopPropagation();
               setIsWalkingMode(!isWalkingMode);
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#071912]/80 hover:bg-[#0E2A1F] border border-[#184635] text-[11px] font-bold text-emerald-200 shadow-xs transition-colors cursor-pointer backdrop-blur-md"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E2EFE5]/90 hover:bg-[#D4E4D8] border border-[#CADCD0] text-[11px] font-bold text-[#0E3323] shadow-xs transition-colors cursor-pointer backdrop-blur-md"
             title="Toggle walking locomotion on platform"
           >
-            <span className={`w-2 h-2 rounded-full ${isWalkingMode ? 'bg-emerald-400 animate-pulse' : 'bg-stone-500'}`} />
+            <span className={`w-2 h-2 rounded-full ${isWalkingMode ? 'bg-emerald-600 animate-pulse' : 'bg-stone-400'}`} />
             <span>{isWalkingMode ? 'Walking' : 'Standby'}</span>
           </button>
         </div>
@@ -281,12 +281,12 @@ export const LobbyPetStage: React.FC<LobbyPetStageProps> = ({
 
       {/* Creature Identity & Origin */}
       <div className="w-full z-10 text-center space-y-1">
-        <h2 className="text-xl sm:text-2xl font-black font-heading text-white tracking-wide">
+        <h2 className="text-xl sm:text-2xl font-black font-heading text-[#0E3323] tracking-wide">
           {creature.name}
         </h2>
         {creature.originalObject && (
-          <p className="text-xs text-[#8BA996]">
-            From: <span className="text-emerald-400 font-semibold">{creature.originalObject}</span>
+          <p className="text-xs text-[#3E6953]">
+            From: <span className="text-emerald-700 font-bold">{creature.originalObject}</span>
           </p>
         )}
       </div>

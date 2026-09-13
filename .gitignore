@@ -36,8 +36,13 @@ google-services.json
 # Node dependencies and build
 node_modules/
 dist/
+dev-dist/
 .env
 .env.local
 .env.*.local
 !.env.example
+
+# Scratch and test artifacts
+/*.png
+scratch/
 

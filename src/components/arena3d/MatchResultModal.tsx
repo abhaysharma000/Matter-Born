@@ -43,8 +43,8 @@ export const MatchResultModal: React.FC<MatchResultModalProps> = ({
   const starsCount = stats.isVictory ? 3 : stats.rank <= 3 ? 2 : 1;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-xs animate-fadeIn">
-      <div className="w-full max-w-sm sm:max-w-md rounded-3xl bg-gradient-to-b from-[#0B241B] via-[#071912] to-[#040E0A] border-2 border-[#2BE29E]/50 p-4 sm:p-5 shadow-2xl text-center relative overflow-hidden text-white my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 bg-black/85 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+      <div className="w-full max-w-sm sm:max-w-md rounded-3xl bg-gradient-to-b from-[#0B241B] via-[#071912] to-[#040E0A] border-2 border-[#2BE29E]/50 p-3.5 sm:p-5 shadow-2xl text-center relative overflow-y-auto max-h-[96vh] text-white my-auto">
         
         {/* Glowing Ambient Backdrop Accent */}
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-[#2BE29E]/20 rounded-full blur-2xl pointer-events-none" />
@@ -181,14 +181,26 @@ export const MatchResultModal: React.FC<MatchResultModalProps> = ({
             </button>
 
             <button
-              onClick={() => {
+              id="btn-result-return-lobby"
+              onPointerDown={(e) => {
+                e.stopPropagation();
                 sound.playClick();
                 onReturnToLobby();
               }}
-              className="py-2.5 px-2 rounded-xl bg-[#071610] hover:bg-[#0E281E] border border-[#163D2E] text-[#8AC1A9] hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95"
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                sound.playClick();
+                onReturnToLobby();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                sound.playClick();
+                onReturnToLobby();
+              }}
+              className="py-2.5 px-2 rounded-xl bg-[#071610] hover:bg-[#0E281E] border border-[#163D2E] text-[#8AC1A9] hover:text-white text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95"
             >
               <Home className="w-3.5 h-3.5 text-[#6DAA8E]" />
-              <span>Main Menu</span>
+              <span>LOBBY</span>
             </button>
           </div>
         </div>

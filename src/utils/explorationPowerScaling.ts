@@ -44,10 +44,10 @@ export function calculateExplorationRewardPoints(
 } {
   const safePeak = Math.max(0, Number(maxDistanceReached) || 0);
 
-  // 1 EP per 2m of peak frontier pushed
-  const continuousPoints = Math.floor(safePeak / METERS_PER_EXPLORATION_POINT);
+  // Guaranteed EP on every 10m covered (100 EP per 10m interval)
+  const tenMeterIntervals = Math.floor(safePeak / 10);
+  const continuousPoints = tenMeterIntervals * 100;
 
-  let milestoneBonusPoints = 0;
   const newMilestonesToClaim: number[] = [];
 
   for (const milestone of EXPLORATION_MILESTONES) {
@@ -55,14 +55,13 @@ export function calculateExplorationRewardPoints(
       if (!claimedMilestones.includes(milestone.distanceMeters)) {
         newMilestonesToClaim.push(milestone.distanceMeters);
       }
-      milestoneBonusPoints += milestone.explorationPointsReward;
     }
   }
 
   return {
     continuousPoints,
-    milestoneBonusPoints,
-    totalSessionPoints: continuousPoints + milestoneBonusPoints,
+    milestoneBonusPoints: 0,
+    totalSessionPoints: continuousPoints,
     newMilestonesToClaim,
   };
 }

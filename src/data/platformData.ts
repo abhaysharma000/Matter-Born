@@ -530,6 +530,7 @@ export const INITIAL_USER: PlatformUser = {
   peakTerritory: 68.4,
   clanName: 'Neon Syndicate',
   clanTag: 'NEON',
+  friends: [],
   matchHistory: [
     {
       id: 'm-1',

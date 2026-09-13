@@ -12,12 +12,15 @@ import {
   Gem, 
   ChevronRight,
   Flame,
-  Award,
-  Star
+  Star,
+  CheckCircle2,
+  CreditCard,
+  Rocket
 } from 'lucide-react';
 import { PlatformUser } from '../../types/platform';
 import { BattleCreature } from '../../types/creature';
 import { OBJECT_PRESETS, ObjectPresetSample } from '../../data/creaturePresets';
+import { savePlayerRobot, setActivePlayerRobot } from '../../utils/robotStorage';
 import confetti from 'canvas-confetti';
 
 interface CybertronPassModalProps {
@@ -29,6 +32,7 @@ interface CybertronPassModalProps {
   onSelectCreature: (creature: BattleCreature) => void;
 }
 
+export const CYBERTRON_PASS_PRICE_INR = 500;
 export const CYBERTRON_PASS_COST_COINS = 500;
 export const CYBERTRON_PASS_COST_GEMS = 25;
 
@@ -42,22 +46,58 @@ export const CybertronPassModal: React.FC<CybertronPassModalProps> = ({
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'autobot' | 'decepticon'>('all');
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [justPurchased, setJustPurchased] = useState(false);
 
   if (!isOpen) return null;
 
   const hasPass = !!user.hasCybertronPass;
-  const unlockedIds = user.unlockedTransformerIds || (hasPass ? OBJECT_PRESETS.map(p => p.id) : ['bumble-volt-battery']);
+  // Filter out starter template 1 — only true Cybertronian Transformers in Pass S1
+  const transformerPresets = OBJECT_PRESETS.filter(p => p.id !== 'starter-template-1');
+  const allTransformerIds = transformerPresets.map(p => p.id);
+  const unlockedIds = user.unlockedTransformerIds || (hasPass ? allTransformerIds : ['bumble-sneaker']);
+
+  const grantGoldPass = (paymentMethod: string) => {
+    const updated: PlatformUser = {
+      ...user,
+      hasCybertronPass: true,
+      coins: user.coins + 2500, // Bonus 2,500 coins for pass purchase
+      gems: user.gems + 50,     // Bonus 50 gems
+      unlockedTransformerIds: allTransformerIds,
+    };
+    onUpdateUser(updated);
+    setIsCheckoutOpen(false);
+    setJustPurchased(true);
+    setPurchaseError(null);
+
+    // Auto-save Optimus Prime to player's robots collection if available
+    const optimus = transformerPresets.find(p => p.id === 'optimus-truck-mug');
+    if (optimus) {
+      savePlayerRobot(optimus.defaultCreature);
+    }
+
+    confetti({ 
+      particleCount: 120, 
+      spread: 90, 
+      origin: { y: 0.5 },
+      colors: ['#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#8B5CF6']
+    });
+  };
+
+  const handlePayINR = () => {
+    grantGoldPass('INR_UPI_CARD');
+  };
 
   const handlePurchaseWithCoins = () => {
     if (user.coins < CYBERTRON_PASS_COST_COINS) {
-      setPurchaseError(`Requires ${CYBERTRON_PASS_COST_COINS} Coins. You have ${user.coins}.`);
+      setPurchaseError(`Requires ${CYBERTRON_PASS_COST_COINS} Coins. You currently have ${user.coins} Coins.`);
       return;
     }
     const updated: PlatformUser = {
       ...user,
       coins: user.coins - CYBERTRON_PASS_COST_COINS,
       hasCybertronPass: true,
-      unlockedTransformerIds: OBJECT_PRESETS.map(p => p.id),
+      unlockedTransformerIds: allTransformerIds,
     };
     onUpdateUser(updated);
     setPurchaseError(null);
@@ -66,14 +106,14 @@ export const CybertronPassModal: React.FC<CybertronPassModalProps> = ({
 
   const handlePurchaseWithGems = () => {
     if (user.gems < CYBERTRON_PASS_COST_GEMS) {
-      setPurchaseError(`Requires ${CYBERTRON_PASS_COST_GEMS} Gems. You have ${user.gems}.`);
+      setPurchaseError(`Requires ${CYBERTRON_PASS_COST_GEMS} Gems. You currently have ${user.gems} Gems.`);
       return;
     }
     const updated: PlatformUser = {
       ...user,
       gems: user.gems - CYBERTRON_PASS_COST_GEMS,
       hasCybertronPass: true,
-      unlockedTransformerIds: OBJECT_PRESETS.map(p => p.id),
+      unlockedTransformerIds: allTransformerIds,
     };
     onUpdateUser(updated);
     setPurchaseError(null);
@@ -81,32 +121,29 @@ export const CybertronPassModal: React.FC<CybertronPassModalProps> = ({
   };
 
   const handleActivateTrial = () => {
-    const updated: PlatformUser = {
-      ...user,
-      hasCybertronPass: true,
-      unlockedTransformerIds: OBJECT_PRESETS.map(p => p.id),
-    };
-    onUpdateUser(updated);
-    setPurchaseError(null);
-    confetti({ particleCount: 90, spread: 90, origin: { y: 0.5 } });
+    grantGoldPass('FREE_TRIAL');
   };
 
   const handleEquipRobot = (preset: ObjectPresetSample) => {
     const isUnlocked = hasPass || unlockedIds.includes(preset.id);
     if (!isUnlocked) {
-      setPurchaseError(`Upgrade to Cybertron Pass to unlock ${preset.defaultCreature.name}!`);
+      setPurchaseError(`Upgrade to Cybertron Gold Pass (₹500) to unlock ${preset.defaultCreature.name}!`);
       return;
     }
+    // Save to player's persistent hangar and select as active
+    savePlayerRobot(preset.defaultCreature);
+    setActivePlayerRobot(preset.defaultCreature);
     onSelectCreature(preset.defaultCreature);
+    
     const updated: PlatformUser = {
       ...user,
       equippedTransformerId: preset.id,
     };
     onUpdateUser(updated);
-    confetti({ particleCount: 25, spread: 45, origin: { y: 0.7 } });
+    confetti({ particleCount: 35, spread: 55, origin: { y: 0.6 } });
   };
 
-  const filteredPresets = OBJECT_PRESETS.filter(p => {
+  const filteredPresets = transformerPresets.filter(p => {
     if (selectedFilter === 'all') return true;
     if (selectedFilter === 'autobot') return p.defaultCreature.faction === 'Autobot';
     if (selectedFilter === 'decepticon') return p.defaultCreature.faction === 'Decepticon';
@@ -114,135 +151,141 @@ export const CybertronPassModal: React.FC<CybertronPassModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm select-none">
-      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl bg-[#F4F9F4] border-2 border-emerald-500/50 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md select-none">
+      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl bg-[#081912] border-2 border-amber-500/60 shadow-2xl shadow-amber-500/20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
-        {/* Modal Header: Cybertron Pass Banner */}
-        <div className="relative p-5 sm:p-6 bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-950 text-white overflow-hidden shrink-0">
+        {/* Modal Header: Cybertronian Transformers Banner */}
+        <div className="relative p-5 sm:p-6 bg-gradient-to-r from-amber-950 via-[#1A261A] to-stone-950 text-white overflow-hidden shrink-0 border-b border-amber-500/30">
           {/* Decorative background glow */}
-          <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-emerald-500/20 blur-2xl pointer-events-none" />
-          <div className="absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-cyan-500/20 blur-2xl pointer-events-none" />
+          <div className="absolute -top-12 -right-12 w-56 h-56 rounded-full bg-amber-500/20 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-10 -left-10 w-56 h-56 rounded-full bg-red-500/20 blur-3xl pointer-events-none" />
 
           <div className="relative z-10 flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                  <Crown className="w-3 h-3" />
-                  <span>SEASON 1 PASS</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-amber-500/30">
+                  <Crown className="w-3.5 h-3.5 fill-amber-950" />
+                  <span>GOLD PASS • SEASON 1</span>
                 </span>
-                {hasPass ? (
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-400 text-emerald-950 text-[10px] font-black tracking-wider flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    <span>PREMIUM PASS ACTIVE</span>
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-900/80 border border-emerald-400/30 text-emerald-200 text-[10px] font-bold">
-                    PREMIUM BUSINESS MODEL
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[11px] font-black tracking-wide">
+                  ₹500 OFFICIAL PASS
+                </span>
+                {hasPass && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400 text-emerald-300 text-[11px] font-black flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>ACTIVE VIP</span>
                   </span>
                 )}
               </div>
 
-              <h2 className="text-xl sm:text-2xl font-black font-heading tracking-wide flex items-center gap-2">
-                <span>Transformers Cybertronian Pass</span>
+              <h2 className="text-2xl sm:text-3xl font-black font-heading tracking-wide flex items-center gap-2.5 text-white">
+                <span className="text-amber-400">Transformers:</span>
+                <span>Cybertron Wars</span>
               </h2>
-              <p className="text-xs text-emerald-200/90 max-w-xl">
-                Unlock 9 iconic 3D Cybertronian battle mechs. Custom engineered chassis, plasma weaponry, and real-world physical combat derivation.
+              <p className="text-xs sm:text-sm text-stone-300/90 max-w-2xl leading-relaxed">
+                Lead the war for Cybertron with <strong className="text-amber-400">Optimus Prime</strong> (Autobot Leader), <strong className="text-purple-400">Mega-Tronus</strong> (Decepticon Emperor), and 9 iconic battle mechs.
               </p>
             </div>
 
             <button
               onClick={onClose}
-              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer shrink-0"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Pass Purchase / Upgrade Controls */}
-          {!hasPass && (
+          {!hasPass ? (
             <div className="mt-4 pt-4 border-t border-white/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="text-xs text-emerald-100 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
-                <span>Get Instant Access to all 9 Legendary Autobots & Decepticons</span>
+              <div className="text-xs text-amber-200/90 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                <span>Unlock all 9 Transformers + 2,500 Coins + 2x Walk EP Boost</span>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
+                {/* Main ₹500 Buy Button */}
+                <button
+                  onClick={() => setIsCheckoutOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-amber-950 font-black text-xs sm:text-sm shadow-lg shadow-amber-500/30 transition-transform active:scale-95 cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>BUY PASS FOR ₹{CYBERTRON_PASS_PRICE_INR}</span>
+                </button>
+
                 <button
                   onClick={handlePurchaseWithCoins}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0E2A1F] hover:bg-[#153D2D] border border-emerald-500/40 text-emerald-300 font-bold text-xs transition-colors cursor-pointer"
                 >
-                  <Coins className="w-3.5 h-3.5" />
+                  <Coins className="w-3.5 h-3.5 text-amber-400" />
                   <span>{CYBERTRON_PASS_COST_COINS} Coins</span>
                 </button>
 
                 <button
-                  onClick={handlePurchaseWithGems}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-cyan-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
-                >
-                  <Gem className="w-3.5 h-3.5" />
-                  <span>{CYBERTRON_PASS_COST_GEMS} Gems</span>
-                </button>
-
-                <button
                   onClick={handleActivateTrial}
-                  className="flex items-center gap-1 px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs transition-colors cursor-pointer"
-                  title="Test the premium pass instantly"
+                  className="px-2.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-stone-300 font-bold text-xs transition-colors cursor-pointer"
+                  title="Test pass instantly"
                 >
                   <span>Free Trial</span>
                 </button>
               </div>
             </div>
+          ) : (
+            <div className="mt-3 pt-3 border-t border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>You own the Season 1 Gold Pass! All 9 Cybertronian Transformers are unlocked in your hangar.</span>
+            </div>
           )}
 
           {purchaseError && (
-            <div className="mt-2 text-xs font-semibold text-rose-300 bg-rose-950/40 px-3 py-1 rounded-lg border border-rose-400/30">
+            <div className="mt-2 text-xs font-semibold text-rose-300 bg-rose-950/60 px-3 py-1.5 rounded-lg border border-rose-500/40">
               {purchaseError}
             </div>
           )}
         </div>
 
         {/* Filter Bar & User Currency status */}
-        <div className="px-5 py-3 bg-[#E8F2EA] border-b border-[#CFE2D3] flex items-center justify-between gap-3 flex-wrap">
+        <div className="px-5 py-3 bg-[#0B2117] border-b border-[#184635] flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setSelectedFilter('all')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 selectedFilter === 'all'
-                  ? 'bg-emerald-700 text-white'
-                  : 'text-[#4D6957] hover:text-[#143823] bg-white/60'
+                  ? 'bg-amber-400 text-amber-950 font-black shadow-sm'
+                  : 'text-[#8BA996] hover:text-white bg-[#061810]'
               }`}
             >
-              All Mechs ({OBJECT_PRESETS.length})
+              All Transformers ({transformerPresets.length})
             </button>
             <button
               onClick={() => setSelectedFilter('autobot')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 selectedFilter === 'autobot'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-[#4D6957] hover:text-[#143823] bg-white/60'
+                  ? 'bg-red-600 text-white font-black shadow-sm shadow-red-600/30'
+                  : 'text-[#8BA996] hover:text-white bg-[#061810]'
               }`}
             >
-              Autobots
+              Autobots (Optimus, Bumblebee)
             </button>
             <button
               onClick={() => setSelectedFilter('decepticon')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 selectedFilter === 'decepticon'
-                  ? 'bg-purple-700 text-white'
-                  : 'text-[#4D6957] hover:text-[#143823] bg-white/60'
+                  ? 'bg-purple-600 text-white font-black shadow-sm shadow-purple-600/30'
+                  : 'text-[#8BA996] hover:text-white bg-[#061810]'
               }`}
             >
-              Decepticons
+              Decepticons (Megatron, Starscream)
             </button>
           </div>
 
-          <div className="flex items-center gap-3 text-xs font-mono font-bold text-[#14532D]">
-            <span className="flex items-center gap-1">
-              <Coins className="w-3.5 h-3.5 text-amber-600" />
+          <div className="flex items-center gap-3 text-xs font-mono font-bold text-emerald-400">
+            <span className="flex items-center gap-1 bg-[#061810] px-2.5 py-1 rounded-lg border border-[#184635]">
+              <Coins className="w-3.5 h-3.5 text-amber-400" />
               <span>{user.coins}</span>
             </span>
-            <span className="flex items-center gap-1">
-              <Gem className="w-3.5 h-3.5 text-cyan-600" />
+            <span className="flex items-center gap-1 bg-[#061810] px-2.5 py-1 rounded-lg border border-[#184635]">
+              <Gem className="w-3.5 h-3.5 text-cyan-400" />
               <span>{user.gems}</span>
             </span>
           </div>
@@ -262,85 +305,85 @@ export const CybertronPassModal: React.FC<CybertronPassModalProps> = ({
                   key={preset.id}
                   className={`rounded-2xl p-4 border transition-all flex flex-col justify-between gap-3 ${
                     isCurrentlyEquipped
-                      ? 'bg-emerald-50 border-2 border-emerald-600 shadow-md ring-1 ring-emerald-400'
+                      ? 'bg-[#0F2D1F] border-2 border-emerald-400 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/50'
                       : isUnlocked
-                      ? 'bg-white border-[#CFE2D3] hover:border-emerald-300 shadow-xs'
-                      : 'bg-stone-100/80 border-stone-300/80 opacity-90'
+                      ? 'bg-[#0A1F16] border-[#1A4B36] hover:border-emerald-500/60 shadow-md'
+                      : 'bg-[#071710]/90 border-[#123324] opacity-85'
                   }`}
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {/* Tier Number & Badges */}
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-[#E8F2EA] text-[10px] font-mono font-bold text-[#14532D]">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/30 text-[10px] font-mono font-bold text-amber-300">
                           Tier {index + 1}
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
                             isDecepticon
-                              ? 'bg-purple-100 text-purple-900 border border-purple-300'
-                              : 'bg-blue-100 text-blue-900 border border-blue-300'
+                              ? 'bg-purple-950 text-purple-300 border border-purple-500/40'
+                              : 'bg-red-950 text-red-300 border border-red-500/40'
                           }`}
                         >
                           {preset.defaultCreature.faction}
                         </span>
-                        <span className="text-[10px] font-bold text-[#55685C] uppercase">
-                          {preset.defaultCreature.robotClass || 'Fighter'}
+                        <span className="text-[10px] font-bold text-[#8BA996] uppercase">
+                          {preset.defaultCreature.robotClass || 'Commander'}
                         </span>
                       </div>
 
-                      <div className="text-xs font-mono font-bold text-emerald-800">
-                        ⚡ {powerRating}
+                      <div className="text-xs font-mono font-black text-amber-400">
+                        ⚡ {powerRating} PWR
                       </div>
                     </div>
 
                     {/* Robot Name & Origin */}
                     <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-[#E8F2EA] border border-[#BCD8C3] flex items-center justify-center text-2xl shrink-0 shadow-inner">
+                      <div className="w-12 h-12 rounded-xl bg-[#061810] border border-[#1E5C44] flex items-center justify-center text-2xl shrink-0 shadow-inner">
                         {preset.icon}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="font-heading font-black text-sm text-[#14532D] truncate">
+                        <h4 className="font-heading font-black text-sm text-white truncate">
                           {preset.defaultCreature.name}
                         </h4>
-                        <div className="text-[11px] text-[#4D6957]">
-                          From: <strong className="text-emerald-900">{preset.name}</strong>
+                        <div className="text-[11px] text-emerald-300/80 truncate">
+                          Morphed: <strong className="text-white">{preset.name}</strong>
                         </div>
-                        <div className="text-[10px] text-[#55685C] italic truncate mt-0.5">
-                          {preset.defaultCreature.specialAbility?.name}
+                        <div className="text-[10px] text-amber-300/80 italic truncate mt-0.5">
+                          Special: {preset.defaultCreature.specialAbility?.name}
                         </div>
                       </div>
                     </div>
 
                     {/* Combat Specs mini-bars */}
                     <div className="grid grid-cols-4 gap-1.5 pt-1 text-[10px] font-mono text-center">
-                      <div className="p-1 rounded bg-[#F4F9F4] border border-[#DFEFE2]">
-                        <span className="text-rose-700 font-bold">HP {preset.defaultCreature.stats.hp}</span>
+                      <div className="p-1 rounded bg-[#061810] border border-[#143B2A]">
+                        <span className="text-rose-400 font-bold">HP {preset.defaultCreature.stats.hp}</span>
                       </div>
-                      <div className="p-1 rounded bg-[#F4F9F4] border border-[#DFEFE2]">
-                        <span className="text-amber-700 font-bold">ATK {preset.defaultCreature.stats.attack}</span>
+                      <div className="p-1 rounded bg-[#061810] border border-[#143B2A]">
+                        <span className="text-amber-400 font-bold">ATK {preset.defaultCreature.stats.attack}</span>
                       </div>
-                      <div className="p-1 rounded bg-[#F4F9F4] border border-[#DFEFE2]">
-                        <span className="text-blue-700 font-bold">DEF {preset.defaultCreature.stats.defense}</span>
+                      <div className="p-1 rounded bg-[#061810] border border-[#143B2A]">
+                        <span className="text-sky-400 font-bold">DEF {preset.defaultCreature.stats.defense}</span>
                       </div>
-                      <div className="p-1 rounded bg-[#F4F9F4] border border-[#DFEFE2]">
-                        <span className="text-emerald-700 font-bold">SPD {preset.defaultCreature.stats.speed}</span>
+                      <div className="p-1 rounded bg-[#061810] border border-[#143B2A]">
+                        <span className="text-emerald-400 font-bold">SPD {preset.defaultCreature.stats.speed}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Card Action: Equip / Locked */}
-                  <div className="pt-2 border-t border-stone-200/80 flex items-center justify-between">
+                  <div className="pt-2.5 border-t border-[#143B2A] flex items-center justify-between">
                     <div className="text-[11px]">
                       {isUnlocked ? (
-                        <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                        <span className="text-emerald-400 font-bold flex items-center gap-1">
                           <Check className="w-3.5 h-3.5" />
                           <span>Unlocked with Pass</span>
                         </span>
                       ) : (
-                        <span className="text-stone-500 font-semibold flex items-center gap-1">
+                        <span className="text-amber-400/80 font-bold flex items-center gap-1">
                           <Lock className="w-3.5 h-3.5" />
-                          <span>Pass Exclusive</span>
+                          <span>Gold Pass Exclusive</span>
                         </span>
                       )}
                     </div>
@@ -348,28 +391,26 @@ export const CybertronPassModal: React.FC<CybertronPassModalProps> = ({
                     {isCurrentlyEquipped ? (
                       <button
                         disabled
-                        className="px-4 py-1.5 rounded-xl bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-default"
+                        className="px-4 py-1.5 rounded-xl bg-emerald-600 text-white font-black text-xs flex items-center gap-1.5 shadow-xs cursor-default"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        <span>EQUIPPED</span>
+                        <span>ACTIVE</span>
                       </button>
                     ) : isUnlocked ? (
                       <button
                         onClick={() => handleEquipRobot(preset)}
-                        className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
+                        className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-[#061810] font-black text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
                       >
                         <Swords className="w-3.5 h-3.5" />
                         <span>EQUIP MECH</span>
                       </button>
                     ) : (
                       <button
-                        onClick={() => {
-                          handlePurchaseWithCoins();
-                        }}
-                        className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold text-xs flex items-center gap-1 transition-all shadow-xs active:scale-95 cursor-pointer"
+                        onClick={() => setIsCheckoutOpen(true)}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-black text-xs flex items-center gap-1 transition-all shadow-md active:scale-95 cursor-pointer"
                       >
-                        <Crown className="w-3.5 h-3.5" />
-                        <span>GET PASS</span>
+                        <Crown className="w-3.5 h-3.5 fill-amber-950" />
+                        <span>UNLOCK ₹500</span>
                       </button>
                     )}
                   </div>
@@ -380,17 +421,85 @@ export const CybertronPassModal: React.FC<CybertronPassModalProps> = ({
         </div>
 
         {/* Footer info */}
-        <div className="p-3 sm:p-4 bg-[#E8F2EA] border-t border-[#CFE2D3] flex items-center justify-between text-xs text-[#4D6957]">
-          <span>Custom morphed objects from camera are always free to transform anytime.</span>
+        <div className="p-3 sm:p-4 bg-[#0B2117] border-t border-[#184635] flex items-center justify-between text-xs text-[#8BA996]">
+          <span>Official Season 1 Pass • All 9 Transformers ready for 3D battle arena.</span>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-white hover:bg-stone-50 border border-[#BCD8C3] text-[#14532D] font-bold cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-[#0E2A1F] hover:bg-[#153D2D] border border-[#1E5C44] text-white font-bold cursor-pointer"
           >
             Close
           </button>
         </div>
 
       </div>
+
+      {/* ₹500 Gold Pass Instant Checkout Modal */}
+      {isCheckoutOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/90 backdrop-blur-lg animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-md bg-[#0A1F16] border-2 border-amber-400/80 rounded-3xl p-6 space-y-5 shadow-2xl text-white">
+            <div className="flex items-center justify-between border-b border-[#184635] pb-3">
+              <div className="flex items-center gap-2">
+                <Crown className="w-5 h-5 text-amber-400 fill-amber-400" />
+                <h3 className="font-heading font-black text-lg text-white">Order Summary: Gold Pass</h3>
+              </div>
+              <button 
+                onClick={() => setIsCheckoutOpen(false)}
+                className="w-8 h-8 rounded-full bg-[#061810] text-[#8BA996] hover:text-white flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#061810] border border-[#184635] space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-heading font-black text-amber-400 text-sm">
+                    Transformers Cybertron: Season 1 Gold Pass
+                  </div>
+                  <div className="text-xs text-[#8BA996]">Premium VIP Lifetime Season Access</div>
+                </div>
+                <div className="text-2xl font-mono font-black text-amber-400">
+                  ₹500
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-[#184635] space-y-1.5 text-xs text-stone-300">
+                <div className="flex items-center gap-2">
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Instant unlock of Optimus Prime, Megatron & 7 more mechs</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Bonus +2,500 Gold Coins & +50 Cybertronian Gems</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>2x Walking Exploration Points (EP) boost</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Gold Autobot / Decepticon VIP Commander Badge</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handlePayINR}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-amber-950 font-black text-sm tracking-wide shadow-xl shadow-amber-500/30 transition-transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>PAY ₹500 & ACTIVATE GOLD PASS</span>
+            </button>
+
+            <button
+              onClick={() => setIsCheckoutOpen(false)}
+              className="w-full py-2 text-center text-xs text-[#8BA996] hover:text-white transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

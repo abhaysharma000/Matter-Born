@@ -30,13 +30,17 @@ export interface ForgeUpgradesState {
 export interface ForgeCombatBonuses {
   damageMultiplier: number;
   damageBonusPercent: number;
+  damageAdd: number;
   fireRateMultiplier: number;
   fireRateBonusPercent: number;
+  fireRateAdd: number;
   specialMultiplier: number;
   specialBonusPercent: number;
+  specialAdd: number;
   specialCdFactor: number;
   healthMultiplier: number;
   healthBonusPercent: number;
+  healthAdd: number;
   levels: ForgeUpgradesState;
 }
 

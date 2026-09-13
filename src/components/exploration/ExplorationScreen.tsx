@@ -17,6 +17,7 @@ import {
   Compass,
   Play,
   Navigation,
+  ListChecks,
 } from 'lucide-react';
 import { useExplorationSession } from '../../hooks/useExplorationSession';
 import { ExplorationMap } from './ExplorationMap';
@@ -24,6 +25,8 @@ import { MIN_STATIONARY_DURATION } from '../../constants/explorationConfig';
 import { formatExplorationDistance } from '../../utils/geoUtils';
 import { ExplorationDiscoveryContext } from '../../types/exploration';
 import { ExplorationUpgradesModal } from './ExplorationUpgradesModal';
+import { ExplorationTasksModal } from './ExplorationTasksModal';
+import { ActiveTaskBanner } from './ActiveTaskBanner';
 import { sound } from '../../utils/audio';
 
 interface ExplorationScreenProps {
@@ -52,10 +55,13 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
     simulateStopWalking,
     getDiscoveryContext,
     isInIframe,
+    resetAllPointsToZero,
+    nearbyPlayers,
   } = useExplorationSession();
 
   const [showDemoTools, setShowDemoTools] = useState(false);
   const [showUpgradesModal, setShowUpgradesModal] = useState(false);
+  const [showTasksModal, setShowTasksModal] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [startSuccessMsg, setStartSuccessMsg] = useState<string | null>(null);
 
@@ -76,7 +82,7 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
     sessionPointsEarned = 0,
   } = session;
 
-  const handleStartExploration = (forceSim: boolean = false) => {
+  const handleStartExploration = async (forceSim: boolean = false) => {
     sound.playClick();
     setIsStarting(true);
 
@@ -98,25 +104,17 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
       return;
     }
 
-    // Attempt real-world GPS
-    navigator.geolocation.getCurrentPosition(
-      () => {
-        startExpedition('Real-World Walk');
-        sound.playBonus();
-        setStartSuccessMsg('🧭 Live GPS Exploration Started!');
-        setTimeout(() => setStartSuccessMsg(null), 3500);
-        setIsStarting(false);
-      },
-      (err) => {
-        console.warn('Geolocation unavailable, fallback to rover mode:', err);
-        startDevSimulatedExpedition('Satellite Rover');
-        sound.playBonus();
-        setStartSuccessMsg('🛰️ Exploration Started! Satellite Rover Active');
-        setTimeout(() => setStartSuccessMsg(null), 3500);
-        setIsStarting(false);
-      },
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
-    );
+    // Call startExpedition directly, which handles position reuse & robust high/standard accuracy fallback
+    try {
+      await startExpedition('Real-World Walk');
+      sound.playBonus();
+      setStartSuccessMsg('🧭 Live GPS Exploration Started!');
+      setTimeout(() => setStartSuccessMsg(null), 3500);
+    } catch (err) {
+      console.warn('Expedition start error:', err);
+    } finally {
+      setIsStarting(false);
+    }
   };
 
   const handleScanClick = () => {
@@ -161,30 +159,47 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
               <span>{isStarting ? 'STARTING...' : 'START EXPLORATION'}</span>
             </button>
           ) : (
-            <div className="flex items-center gap-2">
-              <div className="px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-black flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[11px] sm:text-xs font-black flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>EXPLORING ACTIVE ({formatExplorationDistance(distanceExplored)})</span>
+                <span>ACTIVE ({formatExplorationDistance(distanceExplored)})</span>
               </div>
               <button
                 onClick={startNewExpedition}
-                className="px-2.5 py-1.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-[#0E2F23] hover:bg-[#144433] text-emerald-200 border border-[#1E5F46] text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
                 title="Reset or stop current walk"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset Walk</span>
+                <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                <span>Reset</span>
+              </button>
+              <button
+                onClick={resetAllPointsToZero}
+                className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-500/40 text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                title="Reset EP points to 0"
+              >
+                <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                <span>Reset EP</span>
               </button>
             </div>
           )}
 
+          <button
+            onClick={() => setShowTasksModal(true)}
+            className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-emerald-950 font-black text-[11px] sm:text-xs uppercase tracking-wide flex items-center gap-1 sm:gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+            title="Open Exploration Tasks Menu (Earn 100, 200, 300 EP)"
+          >
+            <ListChecks className="w-3.5 h-3.5" />
+            <span>Tasks</span>
+          </button>
+
           {onNavigateToForge && (
             <button
               onClick={onNavigateToForge}
-              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-amber-950 font-black text-xs uppercase tracking-wide flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+              className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-amber-950 font-black text-[11px] sm:text-xs uppercase tracking-wide flex items-center gap-1 sm:gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
               title="Spend your EP in The Forge"
             >
-              <Anvil className="w-4 h-4 text-amber-950" />
-              <span>The Forge ({explorationPoints} EP)</span>
+              <Anvil className="w-3.5 h-3.5 text-amber-950" />
+              <span>Forge ({explorationPoints} EP)</span>
             </button>
           )}
 
@@ -236,7 +251,7 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
               </p>
               <div className="flex items-center gap-4 pt-1 text-xs text-emerald-300/80 justify-center md:justify-start flex-wrap">
                 <span className="flex items-center gap-1">📍 Real-World Waypoints</span>
-                <span className="flex items-center gap-1">⭐ Earn EP per meter</span>
+                <span className="flex items-center gap-1">⚡ 100 EP every 10m</span>
                 <span className="flex items-center gap-1">🤖 Scan Artifacts at 10m+</span>
               </div>
             </div>
@@ -272,8 +287,17 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
             <Zap className="w-5 h-5 text-amber-400 fill-amber-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-black uppercase tracking-wider text-[#6DAA8E]">
-              EP WE HAVE
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] font-black uppercase tracking-wider text-[#6DAA8E]">
+                EP WE HAVE
+              </div>
+              <button
+                onClick={resetAllPointsToZero}
+                className="text-[10px] font-bold text-amber-400 hover:text-amber-200 underline cursor-pointer"
+                title="Reset EP to 0"
+              >
+                Reset to 0
+              </button>
             </div>
             <div className="font-mono font-black text-2xl sm:text-3xl text-amber-400 truncate">
               {explorationPoints} <span className="text-sm font-sans font-bold text-amber-300/80">EP</span>
@@ -386,10 +410,10 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
                 )}
               </div>
               <p className="text-xs text-amber-200/90 leading-relaxed">
-                {permissionError || 'Location permission was not granted or is not available in this context.'}
+                {permissionError || 'Location permission was not granted or GPS signal is weak.'}
               </p>
               <div className="text-[11px] text-amber-300/80 bg-black/40 p-2.5 rounded-xl border border-amber-500/20">
-                To use native GPS, open the app directly in its own tab, or tap <span className="font-bold text-emerald-300">Play Virtual Rover</span> to explore instantly right here!
+                To allow device location: click the <span className="font-bold text-white">🔒 lock / site settings icon</span> on the left of your browser address bar (<span className="font-mono text-emerald-300">localhost:3000</span>), set <span className="font-bold text-white">Location</span> to <span className="font-bold text-emerald-300">Allow</span>, and click <span className="font-bold text-amber-200">Retry GPS</span> below.
               </div>
             </div>
           </div>
@@ -479,6 +503,12 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
         </div>
       )}
 
+      {/* 5.5 Exploration Missions Active Task HUD Banner */}
+      <ActiveTaskBanner
+        onOpenTasksModal={() => setShowTasksModal(true)}
+        currentDistanceExplored={distanceExplored}
+      />
+
       {/* 6. The Map: Full Hero Experience */}
       <div className="w-full h-[480px] sm:h-[540px] md:h-[600px] relative rounded-2xl overflow-hidden border border-[#18533C] shadow-2xl">
         <ExplorationMap
@@ -492,6 +522,7 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
           gpsStatus={gpsStatus}
           nextMilestoneTitle={nextMilestone?.title}
           nextMilestoneDistance={nextMilestone?.distanceMeters}
+          nearbyPlayers={nearbyPlayers}
           onBackToLobby={onBackToLobby}
         />
       </div>
@@ -583,6 +614,13 @@ export const ExplorationScreen: React.FC<ExplorationScreenProps> = ({
         onClose={() => setShowUpgradesModal(false)}
         explorationPoints={explorationPoints}
         onSpendPoints={spendExplorationPoints}
+      />
+
+      {/* Exploration Missions / Tasks Modal */}
+      <ExplorationTasksModal
+        isOpen={showTasksModal}
+        onClose={() => setShowTasksModal(false)}
+        currentDistanceExplored={distanceExplored}
       />
     </div>
   );

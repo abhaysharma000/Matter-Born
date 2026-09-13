@@ -7,9 +7,9 @@ import { DiscoveryMilestoneConfig, ScanPowerTierConfig, ExplorationUpgradeItem }
 
 // Safety & Stationary Detection
 export const MIN_STATIONARY_DURATION = 2.0; // seconds player must remain stationary to scan
-export const MIN_MOVEMENT_THRESHOLD = 0.35; // m/s (~1.2 km/h) threshold below which player is considered stopped indoors
-export const GPS_ACCURACY_THRESHOLD = 30; // meters: tightened threshold for high accuracy GPS positioning
-export const MAX_REASONABLE_SPEED = 8.0; // m/s (~28 km/h): movement above this is flagged as vehicular/teleport
+export const MIN_MOVEMENT_THRESHOLD = 0.30; // m/s (~1.0 km/h) threshold below which player is considered stopped indoors
+export const GPS_ACCURACY_THRESHOLD = 85; // meters: relaxed to 85m for consumer devices, laptops & indoor GPS
+export const MAX_REASONABLE_SPEED = 12.0; // m/s (~43 km/h): movement above this is flagged as vehicular/teleport
 export const LOCATION_UPDATE_INTERVAL = 1000; // ms between GPS checks for higher responsiveness
 export const DISCOVERY_RADIUS = 8; // meters: radius around a discovery beacon where player is considered arrived
 
@@ -25,80 +25,132 @@ export const EXPLORATION_MILESTONES: DiscoveryMilestoneConfig[] = [
   {
     distanceMeters: 10,
     tier: 'SCOUT',
-    title: 'Hackathon Scout A',
-    codename: 'ZONE-HACK-A',
-    badge: '⭐',
+    title: '10m Distance Covered',
+    codename: 'ZONE-10M',
+    badge: '⚡',
     accentColor: '#10B981', // Emerald
-    bonusTitle: 'Hallway Scout Milestone',
-    bonusDescription: 'Walked 10 meters inside the hackathon hall.',
+    bonusTitle: '10m Distance Covered',
+    bonusDescription: 'Walked 10 meters distance. +100 EP earned!',
     explorationXp: 100,
     explorationCoins: 50,
-    explorationPointsReward: 30,
+    explorationPointsReward: 100,
   },
   {
     distanceMeters: 20,
     tier: 'RANGER',
-    title: 'Corridor Ranger B',
-    codename: 'ZONE-HACK-B',
-    badge: '⭐',
+    title: '20m Distance Covered',
+    codename: 'ZONE-20M',
+    badge: '⚡',
     accentColor: '#059669', // Green
-    bonusTitle: 'Corridor Ranger Milestone',
-    bonusDescription: 'Walked 20 meters across the building corridor.',
-    explorationXp: 250,
-    explorationCoins: 120,
-    explorationPointsReward: 70,
+    bonusTitle: '20m Distance Covered',
+    bonusDescription: 'Walked 20 meters distance. +100 EP earned!',
+    explorationXp: 200,
+    explorationCoins: 100,
+    explorationPointsReward: 100,
   },
   {
-    distanceMeters: 35,
+    distanceMeters: 30,
     tier: 'VANGUARD',
-    title: 'Dev Lab Vanguard C',
-    codename: 'ZONE-HACK-C',
-    badge: '⭐',
+    title: '30m Distance Covered',
+    codename: 'ZONE-30M',
+    badge: '⚡',
     accentColor: '#0284C7', // Sky Blue
-    bonusTitle: 'Dev Lab Vanguard Milestone',
-    bonusDescription: 'Walked 35 meters to the hackathon lab wing.',
-    explorationXp: 500,
-    explorationCoins: 250,
-    explorationPointsReward: 150,
+    bonusTitle: '30m Distance Covered',
+    bonusDescription: 'Walked 30 meters distance. +100 EP earned!',
+    explorationXp: 300,
+    explorationCoins: 150,
+    explorationPointsReward: 100,
+  },
+  {
+    distanceMeters: 40,
+    tier: 'VANGUARD',
+    title: '40m Distance Covered',
+    codename: 'ZONE-40M',
+    badge: '⚡',
+    accentColor: '#0284C7',
+    bonusTitle: '40m Distance Covered',
+    bonusDescription: 'Walked 40 meters distance. +100 EP earned!',
+    explorationXp: 400,
+    explorationCoins: 200,
+    explorationPointsReward: 100,
   },
   {
     distanceMeters: 50,
     tier: 'APEX',
-    title: 'Main Hall Apex D',
-    codename: 'ZONE-HACK-D',
-    badge: '⭐',
+    title: '50m Distance Covered',
+    codename: 'ZONE-50M',
+    badge: '⚡',
     accentColor: '#D97706', // Amber
-    bonusTitle: 'Main Hall Apex Milestone',
-    bonusDescription: 'Walked 50 meters into the central presentation hall.',
-    explorationXp: 1000,
-    explorationCoins: 500,
-    explorationPointsReward: 350,
+    bonusTitle: '50m Distance Covered',
+    bonusDescription: 'Walked 50 meters distance. +100 EP earned!',
+    explorationXp: 500,
+    explorationCoins: 250,
+    explorationPointsReward: 100,
   },
   {
-    distanceMeters: 75,
+    distanceMeters: 60,
+    tier: 'APEX',
+    title: '60m Distance Covered',
+    codename: 'ZONE-60M',
+    badge: '⚡',
+    accentColor: '#D97706',
+    bonusTitle: '60m Distance Covered',
+    bonusDescription: 'Walked 60 meters distance. +100 EP earned!',
+    explorationXp: 600,
+    explorationCoins: 300,
+    explorationPointsReward: 100,
+  },
+  {
+    distanceMeters: 70,
     tier: 'ENERGON',
-    title: 'Atrium Gateway E',
-    codename: 'ZONE-HACK-E',
-    badge: '⭐',
+    title: '70m Distance Covered',
+    codename: 'ZONE-70M',
+    badge: '⚡',
     accentColor: '#7C3AED', // Purple
-    bonusTitle: 'Atrium Gateway Milestone',
-    bonusDescription: 'Walked 75 meters across the complex atrium.',
-    explorationXp: 1500,
-    explorationCoins: 800,
-    explorationPointsReward: 600,
+    bonusTitle: '70m Distance Covered',
+    bonusDescription: 'Walked 70 meters distance. +100 EP earned!',
+    explorationXp: 700,
+    explorationCoins: 350,
+    explorationPointsReward: 100,
+  },
+  {
+    distanceMeters: 80,
+    tier: 'ENERGON',
+    title: '80m Distance Covered',
+    codename: 'ZONE-80M',
+    badge: '⚡',
+    accentColor: '#7C3AED',
+    bonusTitle: '80m Distance Covered',
+    bonusDescription: 'Walked 80 meters distance. +100 EP earned!',
+    explorationXp: 800,
+    explorationCoins: 400,
+    explorationPointsReward: 100,
+  },
+  {
+    distanceMeters: 90,
+    tier: 'ENERGON',
+    title: '90m Distance Covered',
+    codename: 'ZONE-90M',
+    badge: '⚡',
+    accentColor: '#7C3AED',
+    bonusTitle: '90m Distance Covered',
+    bonusDescription: 'Walked 90 meters distance. +100 EP earned!',
+    explorationXp: 900,
+    explorationCoins: 450,
+    explorationPointsReward: 100,
   },
   {
     distanceMeters: 100,
     tier: 'MYTHIC',
-    title: 'Grand Hackathon Matrix',
-    codename: 'ZONE-HACK-MASTER',
+    title: '100m Master Milestone',
+    codename: 'ZONE-100M',
     badge: '🔴',
     accentColor: '#DC2626', // Red
-    bonusTitle: 'Supreme Building Mastery',
-    bonusDescription: 'Explored 100 meters across the entire hackathon venue. Unlocks maximum power scaling.',
-    explorationXp: 2500,
-    explorationCoins: 1200,
-    explorationPointsReward: 1000,
+    bonusTitle: '100m Distance Covered',
+    bonusDescription: 'Explored 100 meters distance. Maximum power scaling unlocked!',
+    explorationXp: 1000,
+    explorationCoins: 500,
+    explorationPointsReward: 100,
   },
 ];
 
@@ -262,7 +314,7 @@ export const DEFAULT_DEMO_COORDINATES = {
 };
 
 // Storage Keys
-export const EXPLORATION_STORAGE_KEY = 'animatrix_exploration_session_v3';
+export const EXPLORATION_STORAGE_KEY = 'animatrix_exploration_session_v4';
 export const EXPLORATION_UPGRADES_STORAGE_KEY = 'animatrix_exploration_upgrades_v1';
 export const LIFETIME_EP_STORAGE_KEY = 'animatrix_lifetime_exploration_points_v1';
 export const LIFETIME_DISTANCE_STORAGE_KEY = 'animatrix_lifetime_distance_meters_v1';

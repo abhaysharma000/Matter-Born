@@ -7,19 +7,23 @@ import {
   Wind, 
   Swords, 
   Skull,
+  Bot,
   Layers,
   X,
   ArrowUp,
+  ArrowLeft,
   Activity,
   Brain,
   Sparkles,
   ChevronRight,
   Compass,
-  Anvil
+  Anvil,
+  Users
 } from 'lucide-react';
 import { BattleCreature } from '../../types/creature';
 import { ArenaHUDState } from '../../game3d/ThreeArenaEngine';
 import { VirtualJoystick } from './VirtualJoystick';
+import { TouchLookJoystick } from './TouchLookJoystick';
 import { MiniMap } from './MiniMap';
 import { CombatDnaBlueprintView } from '../morph/CombatDnaBlueprintView';
 import { TacticalInspectorModal } from './TacticalInspectorModal';
@@ -31,12 +35,14 @@ interface Arena3DHUDProps {
   isMuted: boolean;
   onToggleMute: () => void;
   onMoveInput: (vector: { x: number; z: number }) => void;
+  onRotateCamera?: (deltaYaw: number, deltaPitch: number) => void;
   onAttack: (pressed: boolean) => void;
   onSpecialAbility: (pressed: boolean) => void;
   onDash: (pressed: boolean) => void;
   onJump: (pressed: boolean) => void;
   onPauseToggle: () => void;
   isPaused: boolean;
+  onExit?: () => void;
   onVoiceCommand?: (command: string) => void;
   onKineticTap?: () => void;
   onTriggerAdaptation?: (forcedPattern?: DetectedPlayerPattern) => void;
@@ -48,12 +54,14 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
   isMuted,
   onToggleMute,
   onMoveInput,
+  onRotateCamera,
   onAttack,
   onSpecialAbility,
   onDash,
   onJump,
   onPauseToggle,
   isPaused,
+  onExit,
   onTriggerAdaptation,
 }) => {
   const [showMaterialDrawer, setShowMaterialDrawer] = useState(false);
@@ -74,42 +82,76 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-3 sm:p-5 select-none font-sans overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none z-30 flex flex-col justify-between p-2.5 sm:p-4 select-none font-sans overflow-hidden">
       
-      {/* Top Header Bar: Clean & Minimal */}
-      <div className="flex items-start justify-between gap-3 w-full">
+      {/* Top Header Bar: Clean, Unified & Minimal */}
+      <div className="relative z-40 flex items-start justify-between gap-2 sm:gap-3 w-full">
         
-        {/* Left: Creature Health & Status (Simplified, Clean, Large & Readable) */}
-        <div className="pointer-events-auto flex items-center gap-3 p-2.5 sm:p-3 rounded-2xl bg-[#071610]/90 backdrop-blur-md border border-[#184635] shadow-xl min-w-[190px] sm:min-w-[240px]">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm text-white shrink-0 border border-emerald-400/30 shadow-md"
-            style={{ backgroundColor: creature.visualParams?.primaryColor || '#059669' }}
-          >
-            {creature.name.charAt(0)}
-          </div>
+        {/* Left Corner: Quick Exit Arrow + Small Circular Radar MiniMap + Creature Health & Status */}
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2.5">
+          {/* Quick Exit to Lobby Button (Left) */}
+          {onExit && (
+            <button
+              type="button"
+              id="btn-hud-left-exit"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExit();
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                onExit();
+              }}
+              className="p-2 sm:p-2.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 active:scale-95 text-white font-black shadow-xl cursor-pointer transition-all border border-rose-400/50 flex items-center justify-center shrink-0"
+              title="Exit to Lobby"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[3]" />
+            </button>
+          )}
 
-          <div className="flex-1 min-w-0 space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-black text-white truncate max-w-[120px] sm:max-w-[150px] tracking-wide">
-                {creature.name}
-              </span>
-              <span className="text-[11px] text-emerald-300 font-mono font-bold">
-                {hudState.playerHp} / {hudState.playerMaxHp}
-              </span>
+          {/* Circular MiniMap in Left Corner */}
+          <MiniMap hudState={hudState} />
+
+          {/* Creature Health & Status */}
+          <div className="flex items-center gap-2 sm:gap-2.5 p-2 sm:p-2.5 rounded-2xl bg-[#071610]/92 backdrop-blur-md border border-[#184635] shadow-xl min-w-[130px] sm:min-w-[200px]">
+            <div
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-black text-xs sm:text-sm text-white shrink-0 border border-emerald-400/30 shadow-md"
+              style={{ backgroundColor: creature.visualParams?.primaryColor || '#059669' }}
+            >
+              {creature.name.charAt(0)}
             </div>
 
-            {/* Large Readable Health Bar */}
-            <div className="h-3 w-full rounded-full bg-[#0E281E] border border-[#1C4D3A] overflow-hidden relative shadow-inner">
-              <div
-                className={`h-full transition-all duration-200 rounded-full ${
-                  hpRatio > 0.5
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-sm shadow-emerald-400/50'
-                    : hpRatio > 0.25
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                    : 'bg-gradient-to-r from-rose-600 to-red-500 animate-pulse'
-                }`}
-                style={{ width: `${hpRatio * 100}%` }}
-              />
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center justify-between text-xs gap-1.5">
+                <span className="font-black text-white truncate max-w-[80px] sm:max-w-[130px] tracking-wide text-[11px] sm:text-xs">
+                  {creature.name}
+                </span>
+                <span className="text-[10px] sm:text-[11px] text-emerald-300 font-mono font-bold">
+                  {hudState.playerHp}/{hudState.playerMaxHp}
+                </span>
+              </div>
+
+              {/* Large Readable Health Bar */}
+              <div className="h-2.5 sm:h-3 w-full rounded-full bg-[#0E281E] border border-[#1C4D3A] overflow-hidden relative shadow-inner">
+                <div
+                  className={`h-full transition-all duration-200 rounded-full ${
+                    hpRatio > 0.5
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-sm shadow-emerald-400/50'
+                      : hpRatio > 0.25
+                      ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                      : 'bg-gradient-to-r from-rose-600 to-red-500 animate-pulse'
+                  }`}
+                  style={{ width: `${hpRatio * 100}%` }}
+                />
+              </div>
+
+              {/* Bush Stealth Hiding Indicator */}
+              {hudState.isHidingInBush && (
+                <div className="flex items-center gap-1 text-[9px] sm:text-[10px] text-emerald-300 font-mono font-bold tracking-wider animate-pulse pt-0.5">
+                  <span>🌿</span>
+                  <span>HIDDEN (2.5x CRIT)</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -118,46 +160,51 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
         {showAdaptationBanner && (
           <div 
             id="ai-adaptation-toast"
-            className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-[#091B14]/95 backdrop-blur-md border border-amber-500/60 text-white text-xs shadow-xl animate-in slide-in-from-top-4 duration-300 max-w-sm sm:max-w-md"
+            className="pointer-events-auto hidden md:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#091B14]/95 backdrop-blur-md border border-amber-500/60 text-white text-xs shadow-xl animate-in slide-in-from-top-4 duration-300 max-w-xs sm:max-w-md"
           >
-            <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-              <Sparkles className="w-3.5 h-3.5 animate-spin" />
+            <div className="w-5 h-5 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+              <Sparkles className="w-3 h-3 animate-spin" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="font-black text-amber-400 text-[10px] uppercase tracking-wider">
-                  Enemy Strategy Shift!
+                  Strategy Shift!
                 </span>
-                <span className="text-[10px] text-[#A1D2BC]">
-                  Countering {recentEvent.patternDetected.replace(/_/g, ' ')}
+                <span className="text-[10px] text-[#A1D2BC] truncate">
+                  {recentEvent.patternDetected.replace(/_/g, ' ')}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setDismissedAdaptationId(recentEvent.id)}
-                className="p-1 text-[#6DAA8E] hover:text-white cursor-pointer"
-                title="Dismiss"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <button
+              onClick={() => setDismissedAdaptationId(recentEvent.id)}
+              className="p-0.5 text-[#6DAA8E] hover:text-white cursor-pointer"
+              title="Dismiss"
+            >
+              <X className="w-3 h-3" />
+            </button>
           </div>
         )}
 
-        {/* Center: Material Advantage Notice (Only if active and no banner) */}
-        {!showAdaptationBanner && hudState.materialAdvantageNotice && (
-          <div className="pointer-events-none hidden sm:inline-block px-3 py-1 rounded-full bg-[#091B14]/95 backdrop-blur-md border border-[#2BE29E]/50 text-[#2BE29E] text-xs font-bold shadow-md">
-            {hudState.materialAdvantageNotice}
-          </div>
-        )}
-
-        {/* Right: Enemies Alive, Timer, Sound & Pause */}
-        <div className="pointer-events-auto flex items-center gap-2">
+        {/* Right: Opponents Alive, Timer, Sound & Prominent Exit to Lobby */}
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
           {/* Match Score & Timer */}
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-2xl bg-[#071610]/90 backdrop-blur-md border border-[#184635] text-xs font-bold text-white shadow-xl">
-            <div className="flex items-center gap-1.5 text-rose-400 font-mono font-black" title="Opponents Remaining">
-              <Skull className="w-4 h-4 text-rose-400" />
+          <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-2xl bg-[#071610]/92 backdrop-blur-md border border-[#184635] text-xs font-bold text-white shadow-xl">
+            {hudState.friendCombatantsCount && hudState.friendCombatantsCount > 0 ? (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-mono font-black" title={`Squad Friends in Match: ${hudState.friendNames?.join(', ')}`}>
+                <Users className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <span className="text-[11px] text-emerald-200 font-bold">
+                  {hudState.friendCombatantsCount} FRIENDS + {Math.max(0, 10 - hudState.friendCombatantsCount)} BOTS
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-cyan-300 font-mono font-black" title="10 AI-Integrated NPCs Spawned">
+                <Bot className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                <span className="text-[11px] text-cyan-200">10 AI BOTS</span>
+              </div>
+            )}
+            <span className="text-[#1C4D3A] font-bold">|</span>
+            <div className="flex items-center gap-1 text-rose-400 font-mono font-black" title="Opponents Remaining">
+              <Skull className="w-3.5 h-3.5 text-rose-400" />
               <span>{hudState.aliveCount} left</span>
             </div>
             <span className="text-[#1C4D3A] font-bold">|</span>
@@ -169,26 +216,33 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
           {/* Sound Toggle */}
           <button
             onClick={onToggleMute}
-            className="p-2.5 rounded-2xl bg-[#071610]/90 backdrop-blur-md border border-[#184635] hover:bg-[#0E281E] text-[#6DAA8E] hover:text-white transition-colors shadow-xl cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-2xl bg-[#071610]/92 backdrop-blur-md border border-[#184635] hover:bg-[#0E281E] text-[#6DAA8E] hover:text-white transition-colors shadow-xl cursor-pointer"
             title={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-[#2BE29E]" />}
           </button>
 
-          {/* Pause Toggle */}
-          <button
-            onClick={onPauseToggle}
-            className="p-2.5 rounded-2xl bg-[#071610]/90 backdrop-blur-md border border-[#184635] hover:bg-[#0E281E] text-[#6DAA8E] hover:text-white transition-colors shadow-xl cursor-pointer"
-            title={isPaused ? 'Resume' : 'Pause'}
-          >
-            {isPaused ? <Play className="w-4 h-4 text-[#2BE29E]" /> : <Pause className="w-4 h-4" />}
-          </button>
+          {/* Dedicated Return to Lobby Exit Button (No Pause clutter!) */}
+          {onExit && (
+            <button
+              type="button"
+              id="btn-hud-lobby-exit"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExit();
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                onExit();
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 sm:py-2 rounded-2xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-red-500 active:scale-95 text-white text-xs font-black tracking-wider border-2 border-rose-400 shadow-xl shadow-rose-950/60 transition-all cursor-pointer pointer-events-auto shrink-0 z-50 select-none"
+              title="Exit Match to Lobby"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[3]" />
+              <span>EXIT LOBBY</span>
+            </button>
+          )}
         </div>
-      </div>
-
-      {/* Mini-Map Radar: Top Right */}
-      <div className="absolute top-16 sm:top-18 right-3 sm:right-5 pointer-events-auto z-20">
-        <MiniMap hudState={hudState} />
       </div>
 
       {/* Bottom Controls Area */}
@@ -222,8 +276,11 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
           </span>
         </div>
 
+        {/* Right Half Screen: Direct 360° Touch-to-Look Zone (Swipe/Drag to Look) */}
+        {onRotateCamera && <TouchLookJoystick onRotate={onRotateCamera} />}
+
         {/* Bottom Right: Clean Ergonomic Action Cluster */}
-        <div className="pointer-events-auto relative w-44 h-44 sm:w-48 sm:h-48 flex items-end justify-end select-none touch-none">
+        <div className="pointer-events-auto relative z-20 w-44 h-44 sm:w-48 sm:h-48 flex items-end justify-end select-none touch-none">
           
           {/* Evade / Dash Button (SHIFT) */}
           <div className="absolute top-1 left-2 sm:left-3 flex flex-col items-center">
@@ -360,6 +417,72 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
         history={hudState.tacticalAdaptationHistory}
         onTriggerAdaptation={onTriggerAdaptation}
       />
+
+      {/* Game Paused Fullscreen Modal with Explicit Exit to Lobby Option */}
+      {isPaused && (
+        <div className="fixed inset-0 z-50 pointer-events-auto flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-[#091E16] border border-emerald-500/40 p-6 shadow-2xl flex flex-col items-center text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-inner">
+              <Pause className="w-7 h-7" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-white font-heading tracking-wide">
+                BATTLE PAUSED
+              </h2>
+              <p className="text-xs text-[#8BA996] mt-1">
+                {creature.name} • Survival: {formatTime(hudState.survivalSeconds)}
+              </p>
+            </div>
+
+            <div className="w-full grid grid-cols-2 gap-2 p-3 rounded-2xl bg-[#071610] border border-[#184635] text-xs">
+              <div>
+                <div className="text-[10px] text-[#6DAA8E] font-bold uppercase">OPPONENTS</div>
+                <div className="text-sm font-black text-white font-mono mt-0.5">{hudState.aliveCount} Left</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[#6DAA8E] font-bold uppercase">HEALTH</div>
+                <div className="text-sm font-black text-emerald-400 font-mono mt-0.5">
+                  {hudState.playerHp}/{hudState.playerMaxHp}
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={onPauseToggle}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm tracking-wide shadow-lg shadow-emerald-500/30 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>RESUME MATCH</span>
+              </button>
+
+              {onExit && (
+                <button
+                  type="button"
+                  id="btn-pause-lobby-exit"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    onExit();
+                  }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    onExit();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onExit();
+                  }}
+                  className="w-full py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 border border-rose-400/50 text-white font-black text-sm tracking-wide shadow-lg shadow-rose-900/30 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <ArrowLeft className="w-4 h-4 stroke-[3]" />
+                  <span>EXIT TO LOBBY</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

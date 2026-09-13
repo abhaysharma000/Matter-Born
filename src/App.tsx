@@ -13,6 +13,8 @@ import { PlatformGamePlayer } from './components/platform/PlatformGamePlayer';
 import { ExplorationScreen } from './components/exploration/ExplorationScreen';
 import { CreatureMorphModal } from './components/morph/CreatureMorphModal';
 import { MobileBottomNav } from './components/platform/MobileBottomNav';
+import { LanServerModal } from './components/platform/LanServerModal';
+import { IncomingNotificationOverlay } from './components/platform/IncomingNotificationOverlay';
 import { PlatformUser, GameRoom, DailyQuest } from './types/platform';
 import { GameMode, MatchStats } from './types';
 import { BattleCreature } from './types/creature';
@@ -20,6 +22,8 @@ import { ExplorationDiscoveryContext } from './types/exploration';
 import { OBJECT_PRESETS } from './data/creaturePresets';
 import { INITIAL_USER, DEFAULT_DAILY_QUESTS } from './data/platformData';
 import { sound } from './utils/audio';
+import { resetExplorationPoints } from './utils/forgeManager';
+import { getActivePlayerRobot, savePlayerRobot, setActivePlayerRobot } from './utils/robotStorage';
 import confetti from 'canvas-confetti';
 
 const USER_STORAGE_KEY = 'paperio_platform_user_v2';
@@ -28,14 +32,22 @@ const QUESTS_STORAGE_KEY = 'paperio_platform_quests_v2';
 export default function App() {
   const [activeTab, setActiveTab] = useState<'games' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition'>('games');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  // One-time enforce zero EP for fresh walking progression
+  useEffect(() => {
+    const RESET_FLAG = 'mb_enforce_zero_ep_fresh_v1';
+    if (!localStorage.getItem(RESET_FLAG)) {
+      localStorage.setItem(RESET_FLAG, 'true');
+      resetExplorationPoints();
+    }
+  }, []);
   const [isQuestsOpen, setIsQuestsOpen] = useState(false);
   const [isCybertronPassOpen, setIsCybertronPassOpen] = useState(false);
+  const [isLanServerOpen, setIsLanServerOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Active Creature selected in Lobby
-  const [selectedCreature, setSelectedCreature] = useState<BattleCreature>(
-    OBJECT_PRESETS[0].defaultCreature
-  );
+  // Active Creature selected in Lobby: defaults to Template 1
+  const [selectedCreature, setSelectedCreature] = useState<BattleCreature>(() => getActivePlayerRobot());
 
   // Real-World Expedition Scan Handoff State
   const [activeExplorationContext, setActiveExplorationContext] = useState<ExplorationDiscoveryContext | null>(null);
@@ -44,7 +56,7 @@ export default function App() {
   // Active Playable Game State
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [activeGameTitle, setActiveGameTitle] = useState<string>('Paper.io 2 Arena');
-  const [activeMode, setActiveMode] = useState<GameMode>('classic');
+  const [activeMode, setActiveMode] = useState<GameMode>('easy');
   const [activeRoom, setActiveRoom] = useState<GameRoom | null>(null);
 
   // Platform User State
@@ -79,6 +91,17 @@ export default function App() {
     }
   };
 
+  // Sync friends updates
+  useEffect(() => {
+    const handleFriendsUpdated = (e: any) => {
+      if (Array.isArray(e.detail)) {
+        setUser((prev) => ({ ...prev, friends: e.detail }));
+      }
+    };
+    window.addEventListener('mb_friends_updated', handleFriendsUpdated);
+    return () => window.removeEventListener('mb_friends_updated', handleFriendsUpdated);
+  }, []);
+
   // Persist Quests changes
   const handleUpdateQuests = (updatedQuests: DailyQuest[]) => {
     setQuests(updatedQuests);
@@ -96,7 +119,7 @@ export default function App() {
   };
 
   // Launching games
-  const handleLaunchGame = (gameId: string, mode: GameMode = 'classic') => {
+  const handleLaunchGame = (gameId: string, mode: GameMode = 'easy') => {
     setActiveGameId(gameId);
     setActiveGameTitle('Matter-Born: Object Creature Arena');
     setActiveMode(mode);
@@ -104,6 +127,8 @@ export default function App() {
   };
 
   const handleJoinRoom = (room: GameRoom) => {
+    const activeRobot = selectedCreature || getActivePlayerRobot();
+    setSelectedCreature(activeRobot);
     setActiveGameId('animatrix-3d-arena');
     setActiveGameTitle('Matter-Born: Object Creature Arena');
     setActiveMode(room.mode);
@@ -217,10 +242,16 @@ export default function App() {
       }));
     }
 
+    savePlayerRobot(creature);
     setSelectedCreature(creature);
     setIsExplorationMorphOpen(false);
     setActiveExplorationContext(null);
     setActiveTab('games'); // Return to lobby with new active expedition fighter
+  };
+
+  const handleSelectCreature = (c: BattleCreature) => {
+    setActivePlayerRobot(c);
+    setSelectedCreature(c);
   };
 
   const pendingQuestsCount = quests.filter((q) => q.completed && !q.claimed).length;
@@ -228,33 +259,37 @@ export default function App() {
   // If player is actively in a match, render the in-platform game view
   if (activeGameId) {
     return (
-      <PlatformGamePlayer
-        user={user}
-        gameId={activeGameId}
-        gameTitle={activeGameTitle}
-        room={activeRoom}
-        initialCreature={selectedCreature}
-        onExitToPlatform={handleExitToPlatform}
-        onMatchComplete={handleMatchComplete}
-      />
+      <>
+        <PlatformGamePlayer
+          user={user}
+          gameId={activeGameId}
+          gameTitle={activeGameTitle}
+          room={activeRoom}
+          mode={activeMode}
+          initialCreature={selectedCreature || getActivePlayerRobot()}
+          onExitToPlatform={handleExitToPlatform}
+          onMatchComplete={handleMatchComplete}
+        />
+        <IncomingNotificationOverlay onJoinBattleRoom={handleJoinRoom} />
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0D281E] bg-[radial-gradient(ellipse_100%_75%_at_50%_0%,#133F2C_0%,#0D281E_70%,#092016_100%)] text-white flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200 font-sans relative overflow-x-hidden">
-      
-      {/* Platform Navigation Bar */}
+    <div className="min-h-screen bg-[#E8F0EA] text-[#0E3323] flex flex-col font-sans selection:bg-[#2BE29E] selection:text-[#05110B]">
+      {/* Dynamic Cybertronian Navigation Header */}
       <Navbar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         user={user}
         onOpenProfile={() => setIsProfileOpen(true)}
-        onOpenQuests={() => setIsQuestsOpen(true)}
-        onQuickPlay={() => handleLaunchGame('animatrix-3d-arena', 'classic')}
-        soundEnabled={soundEnabled}
-        onToggleSound={handleToggleSound}
         pendingQuestsCount={pendingQuestsCount}
+        onOpenQuests={() => setIsQuestsOpen(true)}
         onOpenPass={() => setIsCybertronPassOpen(true)}
+        onOpenServerSettings={() => setIsLanServerOpen(true)}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled((prev) => !prev)}
+        onQuickPlay={() => handleLaunchGame('animatrix-3d-arena', activeMode)}
       />
 
       {/* Main Content View by Active Tab */}
@@ -266,7 +301,7 @@ export default function App() {
             onOpenExpedition={() => setActiveTab('expedition')}
             onOpenForge={() => setActiveTab('forge')}
             activeCreature={selectedCreature}
-            onSelectCreature={setSelectedCreature}
+            onSelectCreature={handleSelectCreature}
             user={user}
             onUpdateUser={handleUpdateUser}
             onOpenPass={() => setIsCybertronPassOpen(true)}
@@ -324,30 +359,33 @@ export default function App() {
       />
 
       {/* Desktop Clean Footer (hidden on mobile) */}
-      <footer className="hidden md:block border-t border-[#1B523B] bg-[#0A241A] px-4 sm:px-6 py-4 text-[#8BA996] text-xs">
+      <footer className="hidden md:block border-t border-[#CADCD0] bg-[#E2ECE4] px-4 sm:px-6 py-4 text-[#3E6953] text-xs">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="font-heading font-black text-emerald-400 text-xs">Matter-Born</span>
-            <span className="text-[#32634D]">•</span>
-            <span className="text-[#8BA996]">Transform Real-World Objects into 3D Mech Brawlers</span>
+            <span className="font-heading font-black text-emerald-700 text-xs">Matter-Born</span>
+            <span className="text-[#A3C0AD]">•</span>
+            <span className="text-[#3E6953]">Transform Real-World Objects into 3D Mech Brawlers</span>
           </div>
 
           <div className="flex items-center gap-4 text-xs">
-            <button onClick={() => setActiveTab('games')} className="hover:text-emerald-300 transition-colors font-medium">
+            <button onClick={() => setActiveTab('games')} className="hover:text-emerald-800 transition-colors font-medium cursor-pointer">
               Arena
             </button>
-            <button onClick={() => setActiveTab('expedition')} className="hover:text-emerald-300 transition-colors font-medium">
+            <button onClick={() => setActiveTab('expedition')} className="hover:text-emerald-800 transition-colors font-medium cursor-pointer">
               Explore
             </button>
-            <button onClick={() => setActiveTab('forge')} className="hover:text-amber-300 transition-colors font-bold text-amber-400">
+            <button onClick={() => setActiveTab('forge')} className="hover:text-amber-700 transition-colors font-bold text-amber-700 cursor-pointer">
               Forge
             </button>
-            <button onClick={() => setActiveTab('servers')} className="hover:text-emerald-300 transition-colors font-medium">
+            <button onClick={() => setIsLanServerOpen(true)} className="hover:text-emerald-800 transition-colors font-medium cursor-pointer">
               Servers
             </button>
           </div>
         </div>
       </footer>
+
+      {/* Live Wi-Fi Notifications: Friend Requests & Battle Challenges */}
+      <IncomingNotificationOverlay onJoinBattleRoom={handleJoinRoom} />
 
       {/* Profile Modal */}
       {isProfileOpen && (
@@ -355,6 +393,12 @@ export default function App() {
           user={user}
           onUpdateUser={handleUpdateUser}
           onClose={() => setIsProfileOpen(false)}
+          onLaunchFriendBattle={(friend, room) => {
+            setIsProfileOpen(false);
+            if (room) {
+              handleJoinRoom(room);
+            }
+          }}
         />
       )}
 
@@ -389,6 +433,11 @@ export default function App() {
             setActiveExplorationContext(null);
           }}
         />
+      )}
+
+      {/* Wi-Fi LAN Server Settings Modal */}
+      {isLanServerOpen && (
+        <LanServerModal onClose={() => setIsLanServerOpen(false)} />
       )}
     </div>
   );

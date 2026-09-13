@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BattleCreature } from '../types/creature';
 import { getCreatureWeaponType } from './weaponSkillConfig';
+import { STARTER_TEMPLATE_ROBOT } from '../data/creaturePresets';
 
 export interface Creature3DModel {
   root: THREE.Group;
@@ -22,6 +23,22 @@ export interface Creature3DModel {
 
 export class Creature3DBuilder {
   public static buildCreature(creature: BattleCreature): Creature3DModel {
+    const fallback = STARTER_TEMPLATE_ROBOT;
+    const safeCreature: BattleCreature = {
+      ...fallback,
+      ...(creature || {}),
+      name: creature?.name || fallback.name,
+      stats: {
+        ...fallback.stats,
+        ...(creature?.stats || {}),
+      },
+      visualParams: {
+        ...fallback.visualParams,
+        ...(creature?.visualParams || {}),
+      },
+    };
+    creature = safeCreature;
+
     const root = new THREE.Group();
     const vp = creature.visualParams || ({} as any);
     const scale = vp.scale || 1.1;
@@ -127,51 +144,303 @@ export class Creature3DBuilder {
     const propH = Math.max(0.7, Math.min(1.7, vt?.bodyProportions?.height || 1.0));
     const propD = Math.max(0.7, Math.min(1.7, vt?.bodyProportions?.depth || 1.0));
 
-    const chestWidth = 1.4 * scale * propW;
-    const chestHeight = 1.15 * scale * propH;
-    const chestDepth = 0.95 * scale * propD;
+    // Real-world physical shape archetype detection:
+    // 1. Bottle / Can / Flask -> Cylindrical silhouette, threaded cap collar, fluid level indicators, cylinder cannons
+    // 2. Laptop / Tablet / Screen -> Wide ultra-slim sheet slab, clamshell folding display lid on back, glowing OLED chest display, keyboard matrix
+    // 3. Sphere / Round / Apple / Orb -> Massive glowing spherical orbital chassis, gyroscopic orbital rings, spherical orb pauldrons & orbiting drones
+    const rawArchetype = vp.shapeArchetype;
+    const textClues = [
+      creature.originalObject || '',
+      creature.name || '',
+      creature.objectFeature || '',
+      creature.objectDna?.objectIdentity?.canonicalName || '',
+      creature.objectDna?.visualIdentity?.shape || '',
+      vp.primaryShape || '',
+      vp.objectArchetype || '',
+      ...(vp.geometryHints || []),
+      ...(creature.objectDna?.signatureFeatures || []),
+    ].join(' ').toLowerCase();
 
-    // Main Torso Armor Chassis (Chamfered angular Transformer chest)
-    const chestGeo = new THREE.BoxGeometry(chestWidth, chestHeight, chestDepth);
-    disposables.push(chestGeo);
-    const chestMesh = new THREE.Mesh(chestGeo, armorPlateMat);
-    chestMesh.castShadow = true;
-    robotRootGroup.add(chestMesh);
+    const archetype: 'cylinder' | 'sheet_slab' | 'sphere_round' | 'cuboid_box' =
+      rawArchetype ||
+      (/bottle|flask|canister|thermos|cylinder|cylindrical|can\b|tumbler|mug|cup\b|tube|pipe|beaker|container|dispenser|shampoo|spray|deodorant|candle|vase|penn\b|pencil|marker/i.test(textClues)
+        ? 'cylinder'
+        : /sheet|slab|laptop|notebook|macbook|chromebook|tablet|ipad|phone|smartphone|screen|display|monitor|flatscreen|book|card|paper|board|clipboard|kindle|switch|deck/i.test(textClues)
+        ? 'sheet_slab'
+        : /sphere|spherical|round|ball|orb\b|globe|apple|orange|fruit|tomato|lemon|onion|melon|baseball|basketball|football|soccer|tennis|golf|marble|bulb|pearl|dome|circle|circular/i.test(textClues)
+        ? 'sphere_round'
+        : 'cuboid_box');
 
-    // Front Chest Pectoral Armor Plates / Vehicle Hood
-    const pectW = Math.min(chestWidth * 0.44, 0.68 * scale);
-    const pectH = Math.min(chestHeight * 0.62, 0.76 * scale);
-    const pectLeftGeo = new THREE.BoxGeometry(pectW, pectH, 0.22 * scale);
-    disposables.push(pectLeftGeo);
-    const pectLeft = new THREE.Mesh(pectLeftGeo, trimPlateMat);
-    pectLeft.position.set(chestWidth * 0.24, 0.12 * scale, chestDepth * 0.52);
-    pectLeft.rotation.y = -0.15;
-    chestMesh.add(pectLeft);
+    const isCylinder = archetype === 'cylinder';
+    const isSheetSlab = archetype === 'sheet_slab';
+    const isSphereRound = archetype === 'sphere_round';
 
-    const pectRight = new THREE.Mesh(pectLeftGeo, trimPlateMat);
-    pectRight.position.set(-chestWidth * 0.24, 0.12 * scale, chestDepth * 0.52);
-    pectRight.rotation.y = 0.15;
-    chestMesh.add(pectRight);
+    let chestWidth = 1.4 * scale * propW;
+    let chestHeight = 1.15 * scale * propH;
+    let chestDepth = 0.95 * scale * propD;
+    let cylRadiusTop = 0.54 * scale * propW;
+    let cylRadiusBot = 0.58 * scale * propW;
+    let cylHeight = 1.35 * scale * propH;
+    let sphereRadius = 0.84 * scale * Math.max(propW, propH);
 
-    // Lower Abdominal Hydraulic Midriff
-    const abGeo = new THREE.CylinderGeometry(Math.min(chestWidth, chestDepth) * 0.38, Math.min(chestWidth, chestDepth) * 0.44, 0.55 * scale, 12);
-    disposables.push(abGeo);
-    const abMesh = new THREE.Mesh(abGeo, darkEndoskeletonMat);
-    abMesh.position.y = -(chestHeight * 0.5 + 0.2 * scale);
-    chestMesh.add(abMesh);
+    let chestMesh: THREE.Mesh;
 
-    // Center Energon Spark Chamber / Matrix of Leadership
-    const matrixHousingGeo = new THREE.RingGeometry(0.18 * scale, 0.32 * scale, 16);
-    disposables.push(matrixHousingGeo);
-    const matrixHousing = new THREE.Mesh(matrixHousingGeo, chromeDetailMat);
-    matrixHousing.position.set(0, 0.12 * scale, chestDepth * 0.51);
-    chestMesh.add(matrixHousing);
+    if (isCylinder) {
+      // 1. CYLINDRICAL CHASSIS (Bottle, Flask, Canister, Can, Thermos)
+      const chestGeo = new THREE.CylinderGeometry(cylRadiusTop, cylRadiusBot, cylHeight, 28);
+      disposables.push(chestGeo);
+      chestMesh = new THREE.Mesh(chestGeo, armorPlateMat);
+      chestMesh.castShadow = true;
+      robotRootGroup.add(chestMesh);
 
-    const energonCrystalGeo = new THREE.OctahedronGeometry(0.18 * scale, 0);
-    disposables.push(energonCrystalGeo);
-    const energonCrystal = new THREE.Mesh(energonCrystalGeo, energonCoreMat);
-    energonCrystal.position.set(0, 0.12 * scale, chestDepth * 0.53);
-    chestMesh.add(energonCrystal);
+      // Bottle Cap Neck Collar & Threaded Ring
+      const collarGeo = new THREE.CylinderGeometry(cylRadiusTop * 0.88, cylRadiusTop * 0.98, 0.22 * scale, 24);
+      disposables.push(collarGeo);
+      const collar = new THREE.Mesh(collarGeo, trimPlateMat);
+      collar.position.y = cylHeight * 0.5 + 0.11 * scale;
+      chestMesh.add(collar);
+
+      const threadGeo = new THREE.TorusGeometry(cylRadiusTop * 0.92, 0.035 * scale, 8, 24);
+      disposables.push(threadGeo);
+      const threadRing = new THREE.Mesh(threadGeo, chromeDetailMat);
+      threadRing.rotation.x = Math.PI / 2;
+      threadRing.position.y = cylHeight * 0.5 + 0.14 * scale;
+      chestMesh.add(threadRing);
+
+      // Front Vertical Liquid Level Gauge with Energon Fluid
+      const gaugeBackGeo = new THREE.BoxGeometry(0.18 * scale, cylHeight * 0.68, 0.06 * scale);
+      disposables.push(gaugeBackGeo);
+      const gaugeBack = new THREE.Mesh(gaugeBackGeo, darkEndoskeletonMat);
+      gaugeBack.position.set(0, 0, cylRadiusBot * 0.95);
+      chestMesh.add(gaugeBack);
+
+      const gaugeLiquidGeo = new THREE.BoxGeometry(0.10 * scale, cylHeight * 0.62, 0.08 * scale);
+      disposables.push(gaugeLiquidGeo);
+      const gaugeLiquid = new THREE.Mesh(gaugeLiquidGeo, energonCoreMat);
+      gaugeLiquid.position.set(0, 0, cylRadiusBot * 0.96);
+      chestMesh.add(gaugeLiquid);
+
+      // Graduated measurement tick marks
+      for (let i = -2; i <= 2; i++) {
+        const markGeo = new THREE.BoxGeometry(0.24 * scale, 0.02 * scale, 0.05 * scale);
+        disposables.push(markGeo);
+        const mark = new THREE.Mesh(markGeo, chromeDetailMat);
+        mark.position.set(0, i * 0.18 * scale, cylRadiusBot * 0.97);
+        chestMesh.add(mark);
+      }
+
+      // Flank Pressure Canisters
+      for (const side of [-1, 1]) {
+        const canisterGeo = new THREE.CylinderGeometry(0.14 * scale, 0.14 * scale, cylHeight * 0.75, 16);
+        disposables.push(canisterGeo);
+        const canister = new THREE.Mesh(canisterGeo, chromeDetailMat);
+        canister.position.set(side * (cylRadiusBot + 0.12 * scale), 0, 0);
+        chestMesh.add(canister);
+
+        const capGeo = new THREE.SphereGeometry(0.14 * scale, 12, 12);
+        disposables.push(capGeo);
+        for (const capSide of [-1, 1]) {
+          const capMesh = new THREE.Mesh(capGeo, energonCoreMat);
+          capMesh.position.set(side * (cylRadiusBot + 0.12 * scale), capSide * cylHeight * 0.375, 0);
+          chestMesh.add(capMesh);
+        }
+      }
+
+      // Lower Abdomen Midriff
+      const abGeo = new THREE.CylinderGeometry(cylRadiusBot * 0.75, cylRadiusBot * 0.85, 0.5 * scale, 16);
+      disposables.push(abGeo);
+      const abMesh = new THREE.Mesh(abGeo, darkEndoskeletonMat);
+      abMesh.position.y = -(cylHeight * 0.5 + 0.18 * scale);
+      chestMesh.add(abMesh);
+    } else if (isSheetSlab) {
+      // 2. SHEET / SLAB CHASSIS (Laptop, Tablet, Screen, Notebook, Flat Panel)
+      chestWidth = 1.95 * scale * propW;
+      chestHeight = 1.22 * scale * propH;
+      chestDepth = 0.28 * scale * propD; // Ultra-slim slab profile
+
+      const chestGeo = new THREE.BoxGeometry(chestWidth, chestHeight, chestDepth);
+      disposables.push(chestGeo);
+      chestMesh = new THREE.Mesh(chestGeo, armorPlateMat);
+      chestMesh.castShadow = true;
+      robotRootGroup.add(chestMesh);
+
+      // Front Chest Glowing OLED Screen Panel
+      const screenGeo = new THREE.BoxGeometry(chestWidth * 0.86, chestHeight * 0.62, 0.05 * scale);
+      disposables.push(screenGeo);
+      const screenMesh = new THREE.Mesh(screenGeo, screenGlassMat);
+      screenMesh.position.set(0, 0.14 * scale, chestDepth * 0.51);
+      chestMesh.add(screenMesh);
+
+      // Screen bezel frame
+      const bezelGeo = new THREE.BoxGeometry(chestWidth * 0.90, chestHeight * 0.66, 0.03 * scale);
+      disposables.push(bezelGeo);
+      const bezel = new THREE.Mesh(bezelGeo, darkEndoskeletonMat);
+      bezel.position.set(0, 0.14 * scale, chestDepth * 0.50);
+      chestMesh.add(bezel);
+
+      // Clamshell Folding Screen Lid on Back (like an open laptop or tablet display)
+      const lidGroup = new THREE.Group();
+      lidGroup.position.set(0, 0.45 * scale, -chestDepth * 0.52);
+      lidGroup.rotation.x = -0.36; // Angled open display!
+      chestMesh.add(lidGroup);
+
+      const lidGeo = new THREE.BoxGeometry(chestWidth * 0.96, chestHeight * 0.92, 0.08 * scale);
+      disposables.push(lidGeo);
+      const lidMesh = new THREE.Mesh(lidGeo, trimPlateMat);
+      lidMesh.position.y = chestHeight * 0.42;
+      lidGroup.add(lidMesh);
+
+      const lidScreenGeo = new THREE.BoxGeometry(chestWidth * 0.88, chestHeight * 0.84, 0.04 * scale);
+      disposables.push(lidScreenGeo);
+      const lidScreen = new THREE.Mesh(lidScreenGeo, screenGlassMat);
+      lidScreen.position.set(0, chestHeight * 0.42, 0.03 * scale);
+      lidGroup.add(lidScreen);
+
+      // Outer Illuminated Emblem on back of lid
+      const emblemGeo = new THREE.OctahedronGeometry(0.18 * scale, 0);
+      disposables.push(emblemGeo);
+      const emblem = new THREE.Mesh(emblemGeo, energonCoreMat);
+      emblem.position.set(0, chestHeight * 0.42, -0.05 * scale);
+      lidGroup.add(emblem);
+
+      // Illuminated Keyboard Matrix on Lower Chest / Abdomen
+      const kbGeo = new THREE.BoxGeometry(chestWidth * 0.76, 0.24 * scale, 0.12 * scale);
+      disposables.push(kbGeo);
+      const kbMesh = new THREE.Mesh(kbGeo, darkEndoskeletonMat);
+      kbMesh.position.set(0, -chestHeight * 0.32, chestDepth * 0.52);
+      chestMesh.add(kbMesh);
+
+      for (let r = -1; r <= 1; r++) {
+        const keyRowGeo = new THREE.BoxGeometry(chestWidth * 0.68, 0.035 * scale, 0.04 * scale);
+        disposables.push(keyRowGeo);
+        const keyRow = new THREE.Mesh(keyRowGeo, energonCoreMat);
+        keyRow.position.set(0, -chestHeight * 0.32 + r * 0.065 * scale, chestDepth * 0.52 + 0.05 * scale);
+        chestMesh.add(keyRow);
+      }
+
+      // Thin Slab Abdomen connector
+      const abGeo = new THREE.BoxGeometry(chestWidth * 0.48, 0.45 * scale, chestDepth * 0.85);
+      disposables.push(abGeo);
+      const abMesh = new THREE.Mesh(abGeo, darkEndoskeletonMat);
+      abMesh.position.y = -(chestHeight * 0.5 + 0.18 * scale);
+      chestMesh.add(abMesh);
+    } else if (isSphereRound) {
+      // 3. SPHERICAL CHASSIS (Sphere, Ball, Apple, Fruit, Orb, Globe)
+      const chestGeo = new THREE.SphereGeometry(sphereRadius, 28, 28);
+      disposables.push(chestGeo);
+      chestMesh = new THREE.Mesh(chestGeo, armorPlateMat);
+      chestMesh.castShadow = true;
+      robotRootGroup.add(chestMesh);
+
+      // Equatorial Armor Belt
+      const beltGeo = new THREE.CylinderGeometry(sphereRadius * 1.03, sphereRadius * 1.03, 0.22 * scale, 28, 1, true);
+      disposables.push(beltGeo);
+      const beltMesh = new THREE.Mesh(beltGeo, trimPlateMat);
+      chestMesh.add(beltMesh);
+
+      // Orbital Gyroscopic Ring 1 (Horizontal tilt)
+      const gyroRing1Geo = new THREE.TorusGeometry(sphereRadius * 1.26, 0.045 * scale, 12, 36);
+      disposables.push(gyroRing1Geo);
+      const gyroRing1 = new THREE.Mesh(gyroRing1Geo, chromeDetailMat);
+      gyroRing1.rotation.x = 0.42;
+      gyroRing1.rotation.z = 0.15;
+      chestMesh.add(gyroRing1);
+
+      // Orbital Gyroscopic Ring 2 (Cross diagonal orbital gimbal)
+      const gyroRing2Geo = new THREE.TorusGeometry(sphereRadius * 1.34, 0.038 * scale, 12, 36);
+      disposables.push(gyroRing2Geo);
+      const gyroRing2 = new THREE.Mesh(gyroRing2Geo, energonCoreMat);
+      gyroRing2.rotation.x = -0.65;
+      gyroRing2.rotation.y = 0.75;
+      chestMesh.add(gyroRing2);
+
+      // Central Spherical Allspark Singularity Eye / Ocular Lens
+      const lensRingGeo = new THREE.RingGeometry(0.18 * scale, 0.38 * scale, 24);
+      disposables.push(lensRingGeo);
+      const lensRing = new THREE.Mesh(lensRingGeo, chromeDetailMat);
+      lensRing.position.set(0, 0, sphereRadius * 0.94);
+      chestMesh.add(lensRing);
+
+      const lensGeo = new THREE.SphereGeometry(0.24 * scale, 18, 18);
+      disposables.push(lensGeo);
+      const lens = new THREE.Mesh(lensGeo, energonCoreMat);
+      lens.position.set(0, 0, sphereRadius * 0.88);
+      chestMesh.add(lens);
+
+      // Dynamic Orbiting Satellite Drone Spheres
+      for (let i = 0; i < 3; i++) {
+        const droneGroup = new THREE.Group();
+        const droneSphereGeo = new THREE.SphereGeometry(0.15 * scale, 14, 14);
+        disposables.push(droneSphereGeo);
+        const droneMesh = new THREE.Mesh(droneSphereGeo, energonCoreMat);
+        droneGroup.add(droneMesh);
+
+        const droneRingGeo = new THREE.TorusGeometry(0.22 * scale, 0.02 * scale, 8, 18);
+        disposables.push(droneRingGeo);
+        const droneRing = new THREE.Mesh(droneRingGeo, chromeDetailMat);
+        droneGroup.add(droneRing);
+
+        robotRootGroup.add(droneGroup);
+        orbitingOrbs.push(droneMesh);
+      }
+
+      // Spherical Gimbal Abdomen
+      const abGeo = new THREE.SphereGeometry(0.38 * scale, 16, 16);
+      disposables.push(abGeo);
+      const abMesh = new THREE.Mesh(abGeo, darkEndoskeletonMat);
+      abMesh.position.y = -(sphereRadius * 0.85 + 0.12 * scale);
+      chestMesh.add(abMesh);
+    } else {
+      // 4. DEFAULT CUBOID / BOX CHASSIS
+      const chestGeo = new THREE.BoxGeometry(chestWidth, chestHeight, chestDepth);
+      disposables.push(chestGeo);
+      chestMesh = new THREE.Mesh(chestGeo, armorPlateMat);
+      chestMesh.castShadow = true;
+      robotRootGroup.add(chestMesh);
+
+      // Front Chest Pectoral Armor Plates / Vehicle Hood
+      const pectW = Math.min(chestWidth * 0.44, 0.68 * scale);
+      const pectH = Math.min(chestHeight * 0.62, 0.76 * scale);
+      const pectLeftGeo = new THREE.BoxGeometry(pectW, pectH, 0.22 * scale);
+      disposables.push(pectLeftGeo);
+      const pectLeft = new THREE.Mesh(pectLeftGeo, trimPlateMat);
+      pectLeft.position.set(chestWidth * 0.24, 0.12 * scale, chestDepth * 0.52);
+      pectLeft.rotation.y = -0.15;
+      chestMesh.add(pectLeft);
+
+      const pectRight = new THREE.Mesh(pectLeftGeo, trimPlateMat);
+      pectRight.position.set(-chestWidth * 0.24, 0.12 * scale, chestDepth * 0.52);
+      pectRight.rotation.y = 0.15;
+      chestMesh.add(pectRight);
+
+      // Lower Abdominal Hydraulic Midriff
+      const abGeo = new THREE.CylinderGeometry(
+        Math.min(chestWidth, chestDepth) * 0.38,
+        Math.min(chestWidth, chestDepth) * 0.44,
+        0.55 * scale,
+        12
+      );
+      disposables.push(abGeo);
+      const abMesh = new THREE.Mesh(abGeo, darkEndoskeletonMat);
+      abMesh.position.y = -(chestHeight * 0.5 + 0.2 * scale);
+      chestMesh.add(abMesh);
+    }
+
+    // Center Energon Spark Chamber / Matrix of Leadership (for non-sphere or layered on chest)
+    if (!isSphereRound) {
+      const matrixZ = isCylinder ? cylRadiusBot * 0.95 : isSheetSlab ? chestDepth * 0.52 : chestDepth * 0.51;
+      const matrixHousingGeo = new THREE.RingGeometry(0.18 * scale, 0.32 * scale, 16);
+      disposables.push(matrixHousingGeo);
+      const matrixHousing = new THREE.Mesh(matrixHousingGeo, chromeDetailMat);
+      matrixHousing.position.set(0, 0.12 * scale, matrixZ);
+      chestMesh.add(matrixHousing);
+
+      const energonCrystalGeo = new THREE.OctahedronGeometry(0.18 * scale, 0);
+      disposables.push(energonCrystalGeo);
+      const energonCrystal = new THREE.Mesh(energonCrystalGeo, energonCoreMat);
+      energonCrystal.position.set(0, 0.12 * scale, matrixZ + 0.02 * scale);
+      chestMesh.add(energonCrystal);
+    }
 
     // Captured Real-World Photo Medallion (inset into Energon Matrix!)
     if (creature.capturedImageUrl) {
@@ -197,7 +466,8 @@ export class Creature3DBuilder {
         const ringMesh = new THREE.Mesh(frameRing, energonCoreMat);
         medalGroup.add(ringMesh);
 
-        medalGroup.position.set(0, -0.05 * scale, 0.54 * scale);
+        const medalZ = isCylinder ? cylRadiusBot * 0.96 : isSheetSlab ? chestDepth * 0.54 : isSphereRound ? sphereRadius * 0.97 : chestDepth * 0.54;
+        medalGroup.position.set(0, -0.05 * scale, medalZ);
         chestMesh.add(medalGroup);
       } catch (e) {
         console.warn('Could not load photo into transformer chest:', e);
@@ -493,75 +763,196 @@ export class Creature3DBuilder {
     // 4. TRANSFORMER BATTLE HELMET & OPTICS
     // ==========================================
     const headGroup = new THREE.Group();
-    headGroup.position.set(0, 0.85 * scale, 0.05 * scale);
+    const headOffsetY = isCylinder
+      ? cylHeight * 0.5 + 0.42 * scale
+      : isSphereRound
+      ? sphereRadius * 0.82 + 0.36 * scale
+      : 0.85 * scale;
+    headGroup.position.set(0, headOffsetY, 0.05 * scale);
     chestMesh.add(headGroup);
 
-    // Angular Cybertronian Helmet
-    const helmetGeo = new THREE.BoxGeometry(0.62 * scale, 0.65 * scale, 0.62 * scale);
-    disposables.push(helmetGeo);
-    const helmetMesh = new THREE.Mesh(helmetGeo, armorPlateMat);
-    helmetMesh.castShadow = true;
-    headGroup.add(helmetMesh);
+    if (isCylinder) {
+      // 1. Cylindrical Bottle-Cap Dome Helmet
+      const helmetGeo = new THREE.CylinderGeometry(0.32 * scale, 0.35 * scale, 0.62 * scale, 24);
+      disposables.push(helmetGeo);
+      const helmetMesh = new THREE.Mesh(helmetGeo, armorPlateMat);
+      helmetMesh.castShadow = true;
+      headGroup.add(helmetMesh);
 
-    // Forehead Battle Crest
-    const crestGeo = new THREE.ConeGeometry(0.12 * scale, 0.45 * scale, 4);
-    disposables.push(crestGeo);
-    const crest = new THREE.Mesh(crestGeo, trimPlateMat);
-    crest.position.set(0, 0.45 * scale, 0.15 * scale);
-    crest.rotation.x = -0.2;
-    headGroup.add(crest);
+      // Threaded Cap Crown
+      const capCrownGeo = new THREE.CylinderGeometry(0.28 * scale, 0.32 * scale, 0.16 * scale, 24);
+      disposables.push(capCrownGeo);
+      const capCrown = new THREE.Mesh(capCrownGeo, trimPlateMat);
+      capCrown.position.y = 0.36 * scale;
+      headGroup.add(capCrown);
 
-    // Antenna Ear Spikes (Optimus / Bumblebee audio receptors)
-    for (const side of [-1, 1]) {
-      const earGeo = new THREE.CylinderGeometry(0.04 * scale, 0.04 * scale, 0.6 * scale, 6);
-      disposables.push(earGeo);
-      const ear = new THREE.Mesh(earGeo, trimPlateMat);
-      ear.position.set(side * 0.35 * scale, 0.3 * scale, 0);
-      ear.rotation.z = side * -0.25;
-      headGroup.add(ear);
-    }
+      const capThreadGeo = new THREE.TorusGeometry(0.30 * scale, 0.03 * scale, 8, 24);
+      disposables.push(capThreadGeo);
+      const capThread = new THREE.Mesh(capThreadGeo, chromeDetailMat);
+      capThread.rotation.x = Math.PI / 2;
+      capThread.position.y = 0.32 * scale;
+      headGroup.add(capThread);
 
-    // Angular Faceplate / Battle Mask
-    const maskGeo = new THREE.BoxGeometry(0.46 * scale, 0.32 * scale, 0.18 * scale);
-    disposables.push(maskGeo);
-    const maskMesh = new THREE.Mesh(maskGeo, chromeDetailMat);
-    maskMesh.position.set(0, -0.12 * scale, 0.28 * scale);
-    headGroup.add(maskMesh);
+      // Panoramic Curved Wrap-Around Visor
+      const visorGeo = new THREE.CylinderGeometry(
+        0.36 * scale,
+        0.36 * scale,
+        0.18 * scale,
+        24,
+        1,
+        false,
+        -Math.PI * 0.38,
+        Math.PI * 0.76
+      );
+      disposables.push(visorGeo);
+      const visor = new THREE.Mesh(visorGeo, opticEyeMat);
+      visor.position.y = 0.08 * scale;
+      headGroup.add(visor);
+      eyeMeshes.push(visor);
+    } else if (isSheetSlab) {
+      // 2. Wide Ultra-Slim Terminal Head
+      const helmetGeo = new THREE.BoxGeometry(0.82 * scale, 0.50 * scale, 0.26 * scale);
+      disposables.push(helmetGeo);
+      const helmetMesh = new THREE.Mesh(helmetGeo, armorPlateMat);
+      helmetMesh.castShadow = true;
+      headGroup.add(helmetMesh);
 
-    // Glowing Optic Visor / Eyes
-    if (creature.name.toLowerCase().includes('shock') || creature.name.toLowerCase().includes('cyclops')) {
-      // Shockwave-style single glowing Cyclops optic
-      const cyclopsGeo = new THREE.CylinderGeometry(0.14 * scale, 0.14 * scale, 0.1 * scale, 16);
-      disposables.push(cyclopsGeo);
-      cyclopsGeo.rotateX(Math.PI / 2);
-      const eyeMesh = new THREE.Mesh(cyclopsGeo, opticEyeMat);
-      eyeMesh.position.set(0, 0.12 * scale, 0.32 * scale);
-      headGroup.add(eyeMesh);
-      eyeMeshes.push(eyeMesh);
+      // Full-Width Flat Glass Panoramic Visor
+      const visorGeo = new THREE.BoxGeometry(0.74 * scale, 0.16 * scale, 0.08 * scale);
+      disposables.push(visorGeo);
+      const visor = new THREE.Mesh(visorGeo, opticEyeMat);
+      visor.position.set(0, 0.06 * scale, 0.14 * scale);
+      headGroup.add(visor);
+      eyeMeshes.push(visor);
+
+      // Cyber Data Antenna / Stylus Pen
+      const stylusGeo = new THREE.CylinderGeometry(0.025 * scale, 0.025 * scale, 0.55 * scale, 8);
+      disposables.push(stylusGeo);
+      const stylus = new THREE.Mesh(stylusGeo, chromeDetailMat);
+      stylus.position.set(0.42 * scale, 0.28 * scale, 0);
+      stylus.rotation.z = -0.22;
+      headGroup.add(stylus);
+    } else if (isSphereRound) {
+      // 3. Smooth High-Tech Orbital Sphere Dome
+      const helmetGeo = new THREE.SphereGeometry(0.38 * scale, 24, 24);
+      disposables.push(helmetGeo);
+      const helmetMesh = new THREE.Mesh(helmetGeo, armorPlateMat);
+      helmetMesh.castShadow = true;
+      headGroup.add(helmetMesh);
+
+      // Equatorial Brow Ring
+      const browRingGeo = new THREE.TorusGeometry(0.385 * scale, 0.025 * scale, 8, 24);
+      disposables.push(browRingGeo);
+      const browRing = new THREE.Mesh(browRingGeo, trimPlateMat);
+      browRing.rotation.x = 0.2;
+      headGroup.add(browRing);
+
+      // Central Circular Ocular Mono-Eye
+      const monoEyeGeo = new THREE.SphereGeometry(0.16 * scale, 16, 16);
+      disposables.push(monoEyeGeo);
+      const monoEye = new THREE.Mesh(monoEyeGeo, opticEyeMat);
+      monoEye.position.set(0, 0.06 * scale, 0.30 * scale);
+      headGroup.add(monoEye);
+      eyeMeshes.push(monoEye);
+
+      const eyeRimGeo = new THREE.TorusGeometry(0.18 * scale, 0.025 * scale, 8, 20);
+      disposables.push(eyeRimGeo);
+      const eyeRim = new THREE.Mesh(eyeRimGeo, chromeDetailMat);
+      eyeRim.position.set(0, 0.06 * scale, 0.30 * scale);
+      headGroup.add(eyeRim);
     } else {
-      // Dual glowing optics (Autobot Blue or Decepticon Red)
-      const eyeGeo = new THREE.BoxGeometry(0.14 * scale, 0.08 * scale, 0.08 * scale);
-      disposables.push(eyeGeo);
+      // 4. Angular Cybertronian Helmet
+      const helmetGeo = new THREE.BoxGeometry(0.62 * scale, 0.65 * scale, 0.62 * scale);
+      disposables.push(helmetGeo);
+      const helmetMesh = new THREE.Mesh(helmetGeo, armorPlateMat);
+      helmetMesh.castShadow = true;
+      headGroup.add(helmetMesh);
+
+      // Forehead Battle Crest
+      const crestGeo = new THREE.ConeGeometry(0.12 * scale, 0.45 * scale, 4);
+      disposables.push(crestGeo);
+      const crest = new THREE.Mesh(crestGeo, trimPlateMat);
+      crest.position.set(0, 0.45 * scale, 0.15 * scale);
+      crest.rotation.x = -0.2;
+      headGroup.add(crest);
+
+      // Antenna Ear Spikes (Optimus / Bumblebee audio receptors)
       for (const side of [-1, 1]) {
-        const eyeMesh = new THREE.Mesh(eyeGeo, opticEyeMat);
-        eyeMesh.position.set(side * 0.16 * scale, 0.12 * scale, 0.32 * scale);
+        const earGeo = new THREE.CylinderGeometry(0.04 * scale, 0.04 * scale, 0.6 * scale, 6);
+        disposables.push(earGeo);
+        const ear = new THREE.Mesh(earGeo, trimPlateMat);
+        ear.position.set(side * 0.35 * scale, 0.3 * scale, 0);
+        ear.rotation.z = side * -0.25;
+        headGroup.add(ear);
+      }
+
+      // Angular Faceplate / Battle Mask
+      const maskGeo = new THREE.BoxGeometry(0.46 * scale, 0.32 * scale, 0.18 * scale);
+      disposables.push(maskGeo);
+      const maskMesh = new THREE.Mesh(maskGeo, chromeDetailMat);
+      maskMesh.position.set(0, -0.12 * scale, 0.28 * scale);
+      headGroup.add(maskMesh);
+
+      // Glowing Optic Visor / Eyes
+      const cName = (creature.name || '').toLowerCase();
+      if (cName.includes('shock') || cName.includes('cyclops')) {
+        // Shockwave-style single glowing Cyclops optic
+        const cyclopsGeo = new THREE.CylinderGeometry(0.14 * scale, 0.14 * scale, 0.1 * scale, 16);
+        disposables.push(cyclopsGeo);
+        cyclopsGeo.rotateX(Math.PI / 2);
+        const eyeMesh = new THREE.Mesh(cyclopsGeo, opticEyeMat);
+        eyeMesh.position.set(0, 0.12 * scale, 0.32 * scale);
         headGroup.add(eyeMesh);
         eyeMeshes.push(eyeMesh);
+      } else {
+        // Dual glowing optics (Autobot Blue or Decepticon Red)
+        const eyeGeo = new THREE.BoxGeometry(0.14 * scale, 0.08 * scale, 0.08 * scale);
+        disposables.push(eyeGeo);
+        for (const side of [-1, 1]) {
+          const eyeMesh = new THREE.Mesh(eyeGeo, opticEyeMat);
+          eyeMesh.position.set(side * 0.16 * scale, 0.12 * scale, 0.32 * scale);
+          headGroup.add(eyeMesh);
+          eyeMeshes.push(eyeMesh);
+        }
       }
     }
 
     // ==========================================
     // 5. ARMS & WEAPONS (FUSION CANNON / ION BLASTER)
     // ==========================================
+    const armOffsetX = isSheetSlab
+      ? chestWidth * 0.54
+      : isCylinder
+      ? cylRadiusBot + 0.38 * scale
+      : isSphereRound
+      ? sphereRadius + 0.28 * scale
+      : 0.95 * scale;
+
+    const armOffsetY = isCylinder ? 0.30 * scale : isSphereRound ? 0.22 * scale : 0.35 * scale;
+
     // RIGHT ARM: Heavy Blaster Cannon
     const rightArmGroup = new THREE.Group();
-    rightArmGroup.position.set(0.95 * scale, 0.35 * scale, 0);
+    rightArmGroup.position.set(armOffsetX, armOffsetY, 0);
     chestMesh.add(rightArmGroup);
     limbs.push(rightArmGroup);
 
-    // Shoulder Pauldron
-    const shoulderGeo = new THREE.BoxGeometry(0.48 * scale, 0.45 * scale, 0.55 * scale);
+    // Archetype-adapted Shoulder Pauldron
+    let shoulderGeo: THREE.BufferGeometry;
+    if (isCylinder) {
+      // Cylindrical horizontal pressure tank pauldron
+      shoulderGeo = new THREE.CylinderGeometry(0.24 * scale, 0.24 * scale, 0.62 * scale, 18);
+      shoulderGeo.rotateZ(Math.PI / 2);
+    } else if (isSheetSlab) {
+      // Thin planar sheet armor fin / heat-sink slab
+      shoulderGeo = new THREE.BoxGeometry(0.68 * scale, 0.16 * scale, 0.56 * scale);
+    } else if (isSphereRound) {
+      // Glowing spherical orb pauldron
+      shoulderGeo = new THREE.SphereGeometry(0.35 * scale, 18, 18);
+    } else {
+      shoulderGeo = new THREE.BoxGeometry(0.48 * scale, 0.45 * scale, 0.55 * scale);
+    }
     disposables.push(shoulderGeo);
+
     const rightShoulder = new THREE.Mesh(shoulderGeo, trimPlateMat);
     rightArmGroup.add(rightShoulder);
 
@@ -800,7 +1191,7 @@ export class Creature3DBuilder {
 
     // LEFT ARM: Armored Manipulator & Off-Hand Weapon / Shield
     const leftArmGroup = new THREE.Group();
-    leftArmGroup.position.set(-0.95 * scale, 0.35 * scale, 0);
+    leftArmGroup.position.set(-armOffsetX, armOffsetY, 0);
     chestMesh.add(leftArmGroup);
     limbs.push(leftArmGroup);
 
@@ -863,13 +1254,27 @@ export class Creature3DBuilder {
     // ==========================================
     // 6. BIPEDAL STOMPING MECH LEGS & TREADS
     // ==========================================
+    const legOffsetX = isSheetSlab
+      ? chestWidth * 0.28
+      : isCylinder
+      ? cylRadiusBot * 0.65
+      : isSphereRound
+      ? sphereRadius * 0.55
+      : 0.45 * scale;
+
+    const legOffsetY = isCylinder
+      ? -(cylHeight * 0.5 + 0.45 * scale)
+      : isSphereRound
+      ? -(sphereRadius * 0.85 + 0.45 * scale)
+      : -1.05 * scale;
+
     const leftLegGroup = new THREE.Group();
-    leftLegGroup.position.set(0.45 * scale, -1.05 * scale, 0);
+    leftLegGroup.position.set(legOffsetX, legOffsetY, 0);
     chestMesh.add(leftLegGroup);
     limbs.push(leftLegGroup);
 
     const rightLegGroup = new THREE.Group();
-    rightLegGroup.position.set(-0.45 * scale, -1.05 * scale, 0);
+    rightLegGroup.position.set(-legOffsetX, legOffsetY, 0);
     chestMesh.add(rightLegGroup);
     limbs.push(rightLegGroup);
 

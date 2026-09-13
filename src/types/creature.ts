@@ -93,6 +93,7 @@ export interface CreatureVisualParams {
   // Advanced Object DNA 2.0 parameters
   geometryHints?: string[];
   primaryShape?: string;
+  shapeArchetype?: 'cylinder' | 'sheet_slab' | 'sphere_round' | 'cuboid_box';
   visualFingerprint?: VisualFingerprintDNA;
   visualTransmutation?: VisualTransmutationContract;
 }

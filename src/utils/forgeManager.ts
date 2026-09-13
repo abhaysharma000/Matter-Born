@@ -18,7 +18,7 @@ import {
 } from '../constants/explorationConfig';
 import { formatExplorationDistance } from './geoUtils';
 
-const DEFAULT_STARTER_EP = 850;
+const DEFAULT_STARTER_EP = 0;
 
 const DEFAULT_UPGRADES: ForgeUpgradesState = {
   impact_amplifier: 0,
@@ -35,9 +35,17 @@ export function getExplorationPoints(): number {
     const raw = localStorage.getItem(LIFETIME_EP_STORAGE_KEY);
     if (raw !== null) {
       const val = parseInt(raw, 10);
-      if (!isNaN(val) && val >= 0) return val;
+      if (!isNaN(val) && val >= 0) {
+        // Automatically sanitize and wipe corrupted values from cross-continent origin jumps (> 1,000,000 EP)
+        if (val > 1000000) {
+          localStorage.setItem(LIFETIME_EP_STORAGE_KEY, '0');
+          localStorage.removeItem(EXPLORATION_STORAGE_KEY);
+          return 0;
+        }
+        return val;
+      }
     }
-    // Seed initial starter balance so players can immediately forge and experience combat power
+    // Default 0 EP so players start fresh and earn EP by physical walking
     localStorage.setItem(LIFETIME_EP_STORAGE_KEY, DEFAULT_STARTER_EP.toString());
     return DEFAULT_STARTER_EP;
   } catch {
@@ -50,11 +58,39 @@ export function getExplorationPoints(): number {
  */
 export function setExplorationPoints(points: number): void {
   try {
-    const safe = Math.max(0, Math.round(points));
+    let safe = Math.max(0, Math.round(points));
+    // Guard against crazy corrupted values (> 1,000,000 EP)
+    if (safe > 1000000) safe = 0;
     localStorage.setItem(LIFETIME_EP_STORAGE_KEY, safe.toString());
     notifyForgeUpdated();
   } catch {
     // ignore
+  }
+}
+
+/**
+ * Add Exploration Points (EP)
+ */
+export function addExplorationPoints(delta: number): number {
+  const current = getExplorationPoints();
+  const next = Math.max(0, current + Math.round(delta));
+  setExplorationPoints(next);
+  return next;
+}
+
+/**
+ * Reset Exploration Points to 0 (for fresh walk tracking)
+ */
+export function resetExplorationPoints(): void {
+  try {
+    localStorage.setItem(LIFETIME_EP_STORAGE_KEY, '0');
+    localStorage.setItem(LIFETIME_TOTAL_EP_EARNED_KEY, '0');
+    localStorage.setItem(LIFETIME_DISTANCE_STORAGE_KEY, '0');
+    localStorage.setItem(BEST_EXPEDITION_STORAGE_KEY, '0');
+    localStorage.removeItem(EXPLORATION_STORAGE_KEY);
+    notifyForgeUpdated();
+  } catch (err) {
+    console.warn('Reset EP error:', err);
   }
 }
 
@@ -183,13 +219,13 @@ export function purchaseForgeUpgrade(upgradeId: ForgeUpgradeId): ForgePurchaseRe
   // Child-friendly short celebration messages (Part 13)
   let benefitNotice = '✨ UPGRADE!';
   if (upgradeId === 'alloy_armor') {
-    benefitNotice = '✨ UPGRADE! Health increased!';
+    benefitNotice = '✨ UPGRADE! Health +100 HP!';
   } else if (upgradeId === 'energon_overdrive') {
-    benefitNotice = '🔥 FASTER! Your robot fires faster!';
+    benefitNotice = '🔥 FASTER! Fire Rate +1.0/s!';
   } else if (upgradeId === 'special_core') {
-    benefitNotice = '✨ POWER! Special ability boosted!';
+    benefitNotice = '✨ POWER! Special Damage +10!';
   } else if (upgradeId === 'impact_amplifier') {
-    benefitNotice = '⚔️ STRONGER! Attack damage increased!';
+    benefitNotice = '⚔️ STRONGER! Damage +20!';
   }
 
   return {
@@ -214,19 +250,33 @@ export function getForgeCombatBonuses(upgrades?: ForgeUpgradesState): ForgeComba
   const specialLevel = Math.min(10, current.special_core || 0);
   const hpLevel = Math.min(10, current.alloy_armor || 0);
 
+  // Exact star bonuses requested by user:
+  // Health: +100 HP per star
+  // Damage: +20 Damage per star
+  // Fire Rate: +1.0/s Fire Rate per star
+  // Special: +10 Special Damage per star
+  const healthAdd = hpLevel * 100;
+  const damageAdd = dmgLevel * 20;
+  const fireRateAdd = fireLevel * 1.0;
+  const specialAdd = specialLevel * 10;
+
   return {
-    damageBonusPercent: dmgLevel * 5, // +5% per star, up to +50% at 10 stars
+    damageAdd,
+    damageBonusPercent: dmgLevel * 5,
     damageMultiplier: 1 + (dmgLevel * 0.05),
 
-    fireRateBonusPercent: fireLevel * 5, // +5% firing speed per star, up to +50% at 10 stars
-    fireRateMultiplier: 1 + (fireLevel * 0.05),
+    fireRateAdd,
+    fireRateBonusPercent: fireLevel * 5,
+    fireRateMultiplier: (8.0 + fireRateAdd) / 8.0,
 
-    specialBonusPercent: specialLevel * 5, // +5% special power per star, up to +50% at 10 stars
+    specialAdd,
+    specialBonusPercent: specialLevel * 5,
     specialMultiplier: 1 + (specialLevel * 0.05),
-    specialCdFactor: Math.max(0.70, 1 - (specialLevel * 0.03)), // ~3% cd reduction per star, max 30%
+    specialCdFactor: Math.max(0.70, 1 - (specialLevel * 0.03)),
 
-    healthBonusPercent: hpLevel * 5, // +5% per star, up to +50% at 10 stars
-    healthMultiplier: 1 + (hpLevel * 0.05),
+    healthAdd,
+    healthBonusPercent: hpLevel * 5,
+    healthMultiplier: (1000 + healthAdd) / 1000,
 
     levels: current,
   };

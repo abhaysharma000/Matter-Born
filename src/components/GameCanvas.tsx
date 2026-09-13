@@ -388,7 +388,11 @@ function drawCharacters(ctx: CanvasRenderingContext2D, engine: GameEngine) {
     // Rounded rectangle
     const r = 5;
     ctx.beginPath();
-    ctx.roundRect(-boxSize / 2, -boxSize / 2, boxSize, boxSize, r);
+    if (typeof (ctx as any).roundRect === 'function') {
+      (ctx as any).roundRect(-boxSize / 2, -boxSize / 2, boxSize, boxSize, r);
+    } else {
+      ctx.rect(-boxSize / 2, -boxSize / 2, boxSize, boxSize);
+    }
     ctx.fill();
     ctx.shadowColor = 'transparent';
     ctx.stroke();

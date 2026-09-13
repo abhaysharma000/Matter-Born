@@ -106,6 +106,8 @@ export interface GeoLocationReading extends GeoPoint {
   heading?: number | null; // in degrees
   speed?: number | null;   // in meters/sec
   timestamp: number;
+  isIpFallback?: boolean;
+  locationLabel?: string;
 }
 
 export interface ExplorationOrigin extends GeoPoint {

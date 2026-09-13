@@ -9,6 +9,8 @@ import {
   GpsStatus,
   ExplorationDiscoveryContext,
 } from '../types/exploration';
+import { multiplayerManager } from '../utils/multiplayerManager';
+import { PlayerPresence } from '../types/multiplayer';
 import {
   EXPLORATION_MILESTONES,
   MIN_STATIONARY_DURATION,
@@ -33,7 +35,9 @@ import {
   getExplorationPoints,
   setExplorationPoints,
   recordExpeditionProgress,
+  resetExplorationPoints,
 } from '../utils/forgeManager';
+import { sound } from '../utils/audio';
 
 export interface EpRewardToast {
   id: string;
@@ -55,55 +59,61 @@ export function useExplorationSession() {
       const stored = localStorage.getItem(EXPLORATION_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        const maxDist = parsed.maxDistanceReached ?? parsed.distanceExplored ?? 0;
-        const currentDist = Number(parsed.distanceExplored) || 0;
-        let activeMilestone: DiscoveryMilestoneConfig | null = null;
-        let nextMilestone: DiscoveryMilestoneConfig | null = EXPLORATION_MILESTONES[0];
-        for (let i = 0; i < EXPLORATION_MILESTONES.length; i++) {
-          const m = EXPLORATION_MILESTONES[i];
-          if (maxDist >= m.distanceMeters) {
-            activeMilestone = m;
-            nextMilestone = EXPLORATION_MILESTONES[i + 1] || null;
-          } else {
-            if (!nextMilestone || nextMilestone.distanceMeters <= maxDist) {
-              nextMilestone = m;
+        // Wipe corrupted teleport sessions or oversized EP (> 1,000,000)
+        if (Number(parsed.distanceExplored) > 100000 || Number(parsed.explorationPoints) > 1000000) {
+          localStorage.removeItem(EXPLORATION_STORAGE_KEY);
+          lifetimeEp = 0;
+        } else {
+          const maxDist = parsed.maxDistanceReached ?? parsed.distanceExplored ?? 0;
+          const currentDist = Number(parsed.distanceExplored) || 0;
+          let activeMilestone: DiscoveryMilestoneConfig | null = null;
+          let nextMilestone: DiscoveryMilestoneConfig | null = EXPLORATION_MILESTONES[0];
+          for (let i = 0; i < EXPLORATION_MILESTONES.length; i++) {
+            const m = EXPLORATION_MILESTONES[i];
+            if (maxDist >= m.distanceMeters) {
+              activeMilestone = m;
+              nextMilestone = EXPLORATION_MILESTONES[i + 1] || null;
+            } else {
+              if (!nextMilestone || nextMilestone.distanceMeters <= maxDist) {
+                nextMilestone = m;
+              }
+              break;
             }
-            break;
           }
+
+          const tierConfig = getScanPowerTierConfig(currentDist);
+          const claimedMilestones = Array.isArray(parsed.claimedMilestones) ? parsed.claimedMilestones : [];
+          const savedEp = Number(parsed.explorationPoints) || lifetimeEp;
+
+          // Ensure all properties exist and are valid numbers
+          return {
+            id: parsed.id || `exp-${Date.now()}`,
+            adventureName: parsed.adventureName || 'My Adventure',
+            state: (parsed.state || 'IDLE') as ExplorationState,
+            origin: parsed.origin || null,
+            currentLocation: parsed.currentLocation || null,
+            distanceExplored: currentDist,
+            maxDistanceReached: Number(maxDist) || 0,
+            speedMps: Number(parsed.speedMps) || 0,
+            isStationary: false,
+            stationaryDuration: 0,
+            gpsStatus: 'GPS READY' as GpsStatus,
+            gpsStatusMessage: undefined,
+            activeMilestone: parsed.activeMilestone || activeMilestone,
+            nextMilestone: parsed.nextMilestone !== undefined ? parsed.nextMilestone : nextMilestone,
+            unlockedTiers: Array.isArray(parsed.unlockedTiers) ? parsed.unlockedTiers : [],
+            activeDiscoveryZone: parsed.activeDiscoveryZone || null,
+            breadcrumbs: Array.isArray(parsed.breadcrumbs) ? parsed.breadcrumbs : [],
+            startedAt: Number(parsed.startedAt) || Date.now(),
+            isSimulated: Boolean(parsed.isSimulated),
+            explorationPoints: savedEp,
+            sessionPointsEarned: Number(parsed.sessionPointsEarned) || 0,
+            claimedMilestones,
+            currentScanTier: tierConfig.tier,
+            currentScanPowerMultiplier: tierConfig.powerMultiplier,
+            currentScanPowerBonus: tierConfig.powerBonusPercent,
+          };
         }
-
-        const tierConfig = getScanPowerTierConfig(currentDist);
-        const claimedMilestones = Array.isArray(parsed.claimedMilestones) ? parsed.claimedMilestones : [];
-        const savedEp = Number(parsed.explorationPoints) || lifetimeEp;
-
-        // Ensure all properties exist and are valid numbers
-        return {
-          id: parsed.id || `exp-${Date.now()}`,
-          adventureName: parsed.adventureName || 'My Adventure',
-          state: (parsed.state || 'IDLE') as ExplorationState,
-          origin: parsed.origin || null,
-          currentLocation: parsed.currentLocation || null,
-          distanceExplored: currentDist,
-          maxDistanceReached: Number(maxDist) || 0,
-          speedMps: Number(parsed.speedMps) || 0,
-          isStationary: false,
-          stationaryDuration: 0,
-          gpsStatus: 'GPS READY' as GpsStatus,
-          gpsStatusMessage: undefined,
-          activeMilestone: parsed.activeMilestone || activeMilestone,
-          nextMilestone: parsed.nextMilestone !== undefined ? parsed.nextMilestone : nextMilestone,
-          unlockedTiers: Array.isArray(parsed.unlockedTiers) ? parsed.unlockedTiers : [],
-          activeDiscoveryZone: parsed.activeDiscoveryZone || null,
-          breadcrumbs: Array.isArray(parsed.breadcrumbs) ? parsed.breadcrumbs : [],
-          startedAt: Number(parsed.startedAt) || Date.now(),
-          isSimulated: Boolean(parsed.isSimulated),
-          explorationPoints: savedEp,
-          sessionPointsEarned: Number(parsed.sessionPointsEarned) || 0,
-          claimedMilestones,
-          currentScanTier: tierConfig.tier,
-          currentScanPowerMultiplier: tierConfig.powerMultiplier,
-          currentScanPowerBonus: tierConfig.powerBonusPercent,
-        };
       }
     } catch {
       // ignore
@@ -159,6 +169,43 @@ export function useExplorationSession() {
     return () => window.removeEventListener('animatrix_forge_updated', handleForgeUpdate);
   }, []);
 
+  // Real-World Multiplayer Teammates & Nearby Players Presence Sync
+  const [nearbyPlayers, setNearbyPlayers] = useState<PlayerPresence[]>([]);
+
+  useEffect(() => {
+    multiplayerManager.setLocation(session.currentLocation);
+    multiplayerManager.setStatus('exploring');
+  }, [session.currentLocation]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const pollActivePlayers = async () => {
+      try {
+        const players = await multiplayerManager.fetchActivePlayers();
+        if (isMounted) setNearbyPlayers(players);
+      } catch {}
+    };
+
+    pollActivePlayers();
+    const interval = setInterval(pollActivePlayers, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Safeguard: Automatically clean up any corrupted EP value on mount/render (> 1,000,000 EP)
+  useEffect(() => {
+    if (session.explorationPoints > 1000000) {
+      resetExplorationPoints();
+      setSession((prev) => ({
+        ...prev,
+        explorationPoints: 0,
+        sessionPointsEarned: 0,
+      }));
+    }
+  }, [session.explorationPoints]);
+
   // Save session changes to localStorage
   useEffect(() => {
     try {
@@ -206,47 +253,15 @@ export function useExplorationSession() {
     session.currentScanPowerBonus,
   ]);
 
-  // Generate discovery zones radially around the expedition origin
-  const generateDiscoveryZones = useCallback((origin: ExplorationOrigin): DiscoveryZone[] => {
-    // Generate zones at distinct bearings (30°, 90°, 150°, 210°, 270°, 330°) to distribute across building halls
-    const bearings = [30, 90, 150, 210, 270, 330];
-    return EXPLORATION_MILESTONES.map((milestone, idx) => {
-      const bearing = bearings[idx % bearings.length];
-      const point = calculateDestinationPoint(
-        origin.latitude,
-        origin.longitude,
-        milestone.distanceMeters,
-        bearing
-      );
-      return {
-        id: `zone-${milestone.distanceMeters}`,
-        milestoneDistance: milestone.distanceMeters,
-        tier: milestone.tier,
-        title: milestone.title,
-        codename: milestone.codename,
-        latitude: point.latitude,
-        longitude: point.longitude,
-        unlocked: false,
-        claimed: false,
-        bonusTitle: milestone.bonusTitle,
-        bonusDescription: milestone.bonusDescription,
-        accentColor: milestone.accentColor,
-      };
-    });
+  // Discovery zones removed from map per user request
+  const generateDiscoveryZones = useCallback((_origin: ExplorationOrigin): DiscoveryZone[] => {
+    return [];
   }, []);
 
-  // Update Discovery zones when origin is established
+  // Update Discovery zones (kept empty per request)
   useEffect(() => {
-    if (session.origin) {
-      const zones = generateDiscoveryZones(session.origin);
-      // Mark unlocked if already reached
-      const updated = zones.map((z) => ({
-        ...z,
-        unlocked: session.distanceExplored >= z.milestoneDistance,
-      }));
-      setDiscoveryZones(updated);
-    }
-  }, [session.origin, generateDiscoveryZones, session.distanceExplored]);
+    setDiscoveryZones([]);
+  }, []);
 
   // Handle incoming verified GPS reading
   const processLocationReading = useCallback(
@@ -272,21 +287,49 @@ export function useExplorationSession() {
           };
         }
 
+        // Calculate incremental step distance from last valid reading
+        let stepDist = 0;
+        if (lastReadingRef.current) {
+          const delta = calculateHaversineDistance(
+            lastReadingRef.current.latitude,
+            lastReadingRef.current.longitude,
+            reading.latitude,
+            reading.longitude
+          );
+          // Count genuine walking movements (>= 0.6m and <= 25m to filter jitter/teleport)
+          if (delta >= 0.6 && delta <= 25) {
+            stepDist = delta;
+          }
+        }
+
         lastReadingRef.current = reading;
 
-        // Calculate real-world Haversine distance from origin
-        const rawDistance = calculateHaversineDistance(
+        // Radial distance from expedition origin
+        const rawRadialDistance = calculateHaversineDistance(
           prev.origin.latitude,
           prev.origin.longitude,
           reading.latitude,
           reading.longitude
         );
 
-        // Filter out microscopic standing jitter (< 0.8 meters)
-        const distance = rawDistance < 0.8 ? 0 : rawDistance;
-        const maxDist = Math.max(prev.maxDistanceReached, distance);
+        // Safeguard: If distance from origin is an implausible cross-country/teleport jump (> 3000m), realign origin immediately
+        let radialDistance = rawRadialDistance;
+        if (rawRadialDistance > 3000) {
+          prev.origin = {
+            latitude: reading.latitude,
+            longitude: reading.longitude,
+            timestamp: Date.now(),
+            label: 'Expedition Origin',
+          };
+          radialDistance = 0;
+        }
 
-        // Update breadcrumb trail (sample every 2.5m for detailed indoor building paths)
+        // Effective distance: credit either radial distance from start OR cumulative path walked!
+        const pathDistance = (prev.distanceExplored || 0) + stepDist;
+        const currentEffectiveDistance = Math.min(3000, Math.max(radialDistance, pathDistance));
+        const maxDist = Math.max(prev.maxDistanceReached || 0, currentEffectiveDistance);
+
+        // Update breadcrumb trail (sample every 2m for detailed paths)
         const breadcrumbs = [...prev.breadcrumbs];
         const lastCrumb = breadcrumbs[breadcrumbs.length - 1];
         if (
@@ -296,7 +339,7 @@ export function useExplorationSession() {
             lastCrumb.lng,
             reading.latitude,
             reading.longitude
-          ) >= 2.5
+          ) >= 2.0
         ) {
           breadcrumbs.push({
             lat: reading.latitude,
@@ -326,8 +369,8 @@ export function useExplorationSession() {
           }
         }
 
-        // Calculate Scan Power Tier and Exploration Points with anti-farming
-        const scanTierConfig = getScanPowerTierConfig(distance);
+        // Calculate Scan Power Tier and Exploration Points
+        const scanTierConfig = getScanPowerTierConfig(currentEffectiveDistance);
         const rewardCalc = calculateExplorationRewardPoints(maxDist, prev.claimedMilestones || []);
         const newlyEarnedEp = Math.max(0, rewardCalc.totalSessionPoints - (prev.sessionPointsEarned || 0));
         
@@ -336,11 +379,16 @@ export function useExplorationSession() {
           updatedTotalEp = updatedTotalEp + newlyEarnedEp;
           setExplorationPoints(updatedTotalEp);
           recordExpeditionProgress(maxDist, newlyEarnedEp);
+          try {
+            sound.playBonus();
+          } catch {
+            // ignore
+          }
           setRecentReward({
             id: `${Date.now()}-${Math.random()}`,
             epAmount: newlyEarnedEp,
-            milestoneTitle: activeMilestone?.title,
-            milestoneReached: rewardCalc.newMilestonesToClaim.length > 0,
+            milestoneTitle: activeMilestone?.title || `${Math.floor(maxDist / 10) * 10}m Frontier Reached`,
+            milestoneReached: rewardCalc.newMilestonesToClaim.length > 0 || maxDist >= 10,
             distanceMeters: Math.round(maxDist),
           });
         }
@@ -380,7 +428,7 @@ export function useExplorationSession() {
         return {
           ...prev,
           currentLocation: reading,
-          distanceExplored: Math.round(distance),
+          distanceExplored: Math.round(currentEffectiveDistance),
           maxDistanceReached: Math.round(maxDist),
           speedMps: validation.effectiveSpeed,
           isStationary: isConfirmedStationary,
@@ -404,7 +452,7 @@ export function useExplorationSession() {
     []
   );
 
-  // Geolocation watcher
+  // Geolocation watcher with resilient accuracy fallback
   const startGeolocationWatcher = useCallback(() => {
     if (!navigator.geolocation) {
       setPermissionError('Geolocation is not supported by your browser.');
@@ -418,42 +466,161 @@ export function useExplorationSession() {
 
     setSession((s) => ({ ...s, gpsStatus: 'GPS SEARCHING' }));
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const reading: GeoLocationReading = {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          accuracy: pos.coords.accuracy || 10,
-          altitude: pos.coords.altitude,
-          heading: pos.coords.heading,
-          speed: pos.coords.speed,
-          timestamp: pos.timestamp || Date.now(),
-        };
-        processLocationReading(reading);
-      },
-      (err) => {
-        console.warn('Geolocation watch error:', err);
-        if (err.code === err.PERMISSION_DENIED) {
-          const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
-          if (isInIframe) {
-            setPermissionError(
-              'EMBEDDED PREVIEW DETECTED: Web browsers restrict location prompts inside iframes. Open the app in a new tab for native device GPS, or tap "Start Virtual Satellite Rover" to play immediately!'
-            );
-          } else {
-            setPermissionError('LOCATION ACCESS REQUIRED: Location permission is needed for outdoor GPS tracking. You can also explore with Virtual Satellite Rover.');
+    const startWatcher = (highAccuracy: boolean) => {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const reading: GeoLocationReading = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy || 10,
+            altitude: pos.coords.altitude,
+            heading: pos.coords.heading,
+            speed: pos.coords.speed,
+            timestamp: pos.timestamp || Date.now(),
+          };
+          processLocationReading(reading);
+        },
+        (err) => {
+          console.warn('Geolocation watch error:', err);
+          // If high accuracy timed out on PC / Wi-Fi, fall back to standard accuracy
+          if (highAccuracy && (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE)) {
+            console.log('Switching watchPosition to standard accuracy fallback...');
+            startWatcher(false);
+            return;
           }
-          setSession((s) => ({ ...s, gpsStatus: 'GPS DENIED', state: 'IDLE' }));
-        } else {
-          setSession((s) => ({ ...s, gpsStatus: 'GPS UNAVAILABLE', gpsStatusMessage: err.message }));
+          if (err.code === err.PERMISSION_DENIED) {
+            const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+            if (isInIframe) {
+              setPermissionError(
+                'EMBEDDED PREVIEW DETECTED: Web browsers restrict location prompts inside iframes. Open the app in a new tab for native device GPS, or tap "Start Virtual Satellite Rover" to play immediately!'
+              );
+            } else {
+              setPermissionError('LOCATION ACCESS REQUIRED: Location permission is needed for outdoor GPS tracking. You can also explore with Virtual Satellite Rover.');
+            }
+            setSession((s) => ({ ...s, gpsStatus: 'GPS DENIED', state: 'IDLE' }));
+          } else {
+            setSession((s) => ({ ...s, gpsStatus: 'GPS UNAVAILABLE', gpsStatusMessage: err.message }));
+          }
+        },
+        {
+          enableHighAccuracy: highAccuracy,
+          timeout: highAccuracy ? 8000 : 15000,
+          maximumAge: 1000,
         }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      }
-    );
+      );
+    };
+
+    startWatcher(true);
   }, [processLocationReading]);
+
+  // Reliable IP Geolocation fallback for devices without dedicated satellite GPS or offline APK mode
+  const fetchIpFallbackLocation = useCallback(async () => {
+    try {
+      let data: any = null;
+      try {
+        const res = await fetch('/api/ip-location');
+        data = await res.json();
+      } catch {
+        // Direct public fallback if standalone APK is not connected to local dev server
+        const directRes = await fetch('https://ipwho.is/');
+        data = await directRes.json();
+      }
+      if (data && (data.success || data.latitude) && data.latitude && data.longitude) {
+        setSession((prev) => {
+          // If we already have a real GPS fix, keep it
+          if (prev.currentLocation && !prev.currentLocation.isIpFallback) return prev;
+          const reading: GeoLocationReading = {
+            latitude: data.latitude,
+            longitude: data.longitude,
+            accuracy: 80,
+            altitude: null,
+            heading: null,
+            speed: 0,
+            timestamp: Date.now(),
+            isIpFallback: true,
+            locationLabel: `${data.city ? data.city + ', ' : ''}${data.region || data.country || ''}`,
+          };
+          return {
+            ...prev,
+            currentLocation: reading,
+            gpsStatus: 'GPS READY',
+          };
+        });
+      }
+    } catch (err) {
+      console.warn('IP fallback note:', err);
+    }
+  }, []);
+
+  // Automatic location detection on mount:
+  // Immediately queries user location (using fast standard Wi-Fi/IP accuracy, followed by high-accuracy)
+  // so the player position pin and surrounding map show up accurately right away without needing to click start first!
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      fetchIpFallbackLocation();
+      return;
+    }
+
+    // Fast initial position fetch
+    const fetchInitialFix = () => {
+      setSession((s) => (s.gpsStatus === 'GPS READY' ? s : { ...s, gpsStatus: 'GPS SEARCHING' }));
+
+      // Also schedule fast IP fallback in parallel so player is never stuck with an empty map
+      const ipFallbackTimer = setTimeout(() => {
+        fetchIpFallbackLocation();
+      }, 2500);
+
+      // Fast standard accuracy query (instant on Wi-Fi / IP)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(ipFallbackTimer);
+          const reading: GeoLocationReading = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy || 15,
+            altitude: pos.coords.altitude,
+            heading: pos.coords.heading,
+            speed: 0,
+            timestamp: pos.timestamp || Date.now(),
+          };
+          processLocationReading(reading);
+        },
+        (err) => {
+          console.warn('Initial standard geolocation probe note:', err);
+          if (err.code === err.PERMISSION_DENIED) {
+            clearTimeout(ipFallbackTimer);
+            fetchIpFallbackLocation();
+            return;
+          }
+          // Secondary attempt with high accuracy
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              clearTimeout(ipFallbackTimer);
+              const reading: GeoLocationReading = {
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: pos.coords.accuracy || 10,
+                altitude: pos.coords.altitude,
+                heading: pos.coords.heading,
+                speed: 0,
+                timestamp: pos.timestamp || Date.now(),
+              };
+              processLocationReading(reading);
+            },
+            (err2) => {
+              console.warn('Secondary geolocation probe note:', err2);
+              clearTimeout(ipFallbackTimer);
+              fetchIpFallbackLocation();
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+          );
+        },
+        { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+      );
+    };
+
+    fetchInitialFix();
+  }, [processLocationReading, fetchIpFallbackLocation]);
 
   // Clean up watchers on unmount
   useEffect(() => {
@@ -479,17 +646,58 @@ export function useExplorationSession() {
       return;
     }
 
-    // Capture single initial fix as the origin
+    const establishExpeditionWithOrigin = (currentReading: GeoLocationReading) => {
+      const originPoint: ExplorationOrigin = {
+        latitude: currentReading.latitude,
+        longitude: currentReading.longitude,
+        timestamp: Date.now(),
+        label: 'Expedition Origin',
+      };
+
+      lastReadingRef.current = currentReading;
+
+      const defaultTier = getScanPowerTierConfig(0);
+      setSession((prev) => ({
+        id: `exp-${Date.now()}`,
+        adventureName: finalAdventureName,
+        state: 'EXPLORING',
+        origin: originPoint,
+        currentLocation: currentReading,
+        distanceExplored: 0,
+        maxDistanceReached: 0,
+        speedMps: 0,
+        isStationary: true,
+        stationaryDuration: MIN_STATIONARY_DURATION,
+        gpsStatus: 'GPS READY',
+        activeMilestone: null,
+        nextMilestone: EXPLORATION_MILESTONES[0],
+        unlockedTiers: [],
+        activeDiscoveryZone: null,
+        breadcrumbs: [{ lat: originPoint.latitude, lng: originPoint.longitude, timestamp: Date.now() }],
+        startedAt: Date.now(),
+        isSimulated: false,
+        explorationPoints: prev.explorationPoints ?? 0,
+        sessionPointsEarned: 0,
+        claimedMilestones: [],
+        currentScanTier: defaultTier.tier,
+        currentScanPowerMultiplier: defaultTier.powerMultiplier,
+        currentScanPowerBonus: defaultTier.powerBonusPercent,
+      }));
+
+      startGeolocationWatcher();
+    };
+
+    // If we already have a recent valid location in session, we can start immediately!
+    const existing = lastReadingRef.current || session.currentLocation;
+    if (existing && existing.latitude && existing.longitude) {
+      establishExpeditionWithOrigin(existing);
+      return;
+    }
+
+    // Capture initial fix: Try high accuracy first, gracefully fall back to standard accuracy
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const originPoint: ExplorationOrigin = {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          timestamp: Date.now(),
-          label: 'Expedition Origin',
-        };
-
-        const currentReading: GeoLocationReading = {
+        const reading: GeoLocationReading = {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           accuracy: pos.coords.accuracy || 10,
@@ -498,61 +706,73 @@ export function useExplorationSession() {
           speed: 0,
           timestamp: Date.now(),
         };
-
-        lastReadingRef.current = currentReading;
-
-        const defaultTier = getScanPowerTierConfig(0);
-        setSession((prev) => ({
-          id: `exp-${Date.now()}`,
-          adventureName: finalAdventureName,
-          state: 'EXPLORING',
-          origin: originPoint,
-          currentLocation: currentReading,
-          distanceExplored: 0,
-          maxDistanceReached: 0,
-          speedMps: 0,
-          isStationary: true,
-          stationaryDuration: MIN_STATIONARY_DURATION,
-          gpsStatus: 'GPS READY',
-          activeMilestone: null,
-          nextMilestone: EXPLORATION_MILESTONES[0],
-          unlockedTiers: [],
-          activeDiscoveryZone: null,
-          breadcrumbs: [{ lat: originPoint.latitude, lng: originPoint.longitude, timestamp: Date.now() }],
-          startedAt: Date.now(),
-          isSimulated: false,
-          explorationPoints: prev.explorationPoints ?? 0,
-          sessionPointsEarned: 0,
-          claimedMilestones: [],
-          currentScanTier: defaultTier.tier,
-          currentScanPowerMultiplier: defaultTier.powerMultiplier,
-          currentScanPowerBonus: defaultTier.powerBonusPercent,
-        }));
-
-        startGeolocationWatcher();
+        establishExpeditionWithOrigin(reading);
       },
       (err) => {
-        console.warn('Initial geolocation failed:', err);
+        console.warn('High-accuracy initial geolocation failed, trying standard accuracy:', err);
         if (err.code === err.PERMISSION_DENIED) {
           const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
           if (isInIframe) {
             setPermissionError(
-              'EMBEDDED PREVIEW DETECTED: Web browsers restrict location prompts inside iframes, so no permission prompt appears in settings. Open in a dedicated tab to grant device GPS, or start instantly with Virtual Satellite Rover!'
+              'EMBEDDED PREVIEW DETECTED: Web browsers restrict location prompts inside iframes. Open the app in a new tab for native device GPS, or tap "Start Virtual Satellite Rover" to play immediately!'
             );
           } else {
             setPermissionError(
-              'LOCATION ACCESS DENIED: Device location permission is needed for outdoor GPS mode. You can open site settings to allow location, or explore instantly with Virtual Satellite Rover!'
+              'LOCATION ACCESS DENIED: Device location permission is needed for outdoor GPS mode. Please click the lock icon in your address bar to allow location.'
             );
           }
           setSession((s) => ({ ...s, state: 'IDLE', gpsStatus: 'GPS DENIED' }));
-        } else {
-          setPermissionError('GPS SIGNAL UNAVAILABLE: Unable to acquire GPS lock. Move to an open area outdoors, or switch to Virtual Satellite Rover.');
-          setSession((s) => ({ ...s, state: 'IDLE', gpsStatus: 'GPS UNAVAILABLE', gpsStatusMessage: err.message }));
+          return;
         }
+
+        // Standard accuracy fallback (queries Wi-Fi / IP BSSID, instant and accurate on PC/Laptop)
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const reading: GeoLocationReading = {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy || 25,
+              altitude: pos.coords.altitude,
+              heading: pos.coords.heading,
+              speed: 0,
+              timestamp: Date.now(),
+            };
+            establishExpeditionWithOrigin(reading);
+          },
+          (err2) => {
+            console.warn('Standard fallback also failed, attempting IP location fallback:', err2);
+            fetch('/api/ip-location')
+              .then((r) => r.json())
+              .then((data) => {
+                if (data && data.success && data.latitude && data.longitude) {
+                  const ipReading: GeoLocationReading = {
+                    latitude: data.latitude,
+                    longitude: data.longitude,
+                    accuracy: 80,
+                    altitude: null,
+                    heading: null,
+                    speed: 0,
+                    timestamp: Date.now(),
+                    isIpFallback: true,
+                    locationLabel: `${data.city ? data.city + ', ' : ''}${data.region || ''}`,
+                  };
+                  establishExpeditionWithOrigin(ipReading);
+                } else {
+                  setPermissionError('GPS SIGNAL UNAVAILABLE: Unable to acquire GPS lock. Move to an open area, or switch to Virtual Satellite Rover.');
+                  setSession((s) => ({ ...s, state: 'IDLE', gpsStatus: 'GPS UNAVAILABLE', gpsStatusMessage: err2.message }));
+                }
+              })
+              .catch(() => {
+                setPermissionError('GPS SIGNAL UNAVAILABLE: Unable to acquire GPS lock. Move to an open area, or switch to Virtual Satellite Rover.');
+                setSession((s) => ({ ...s, state: 'IDLE', gpsStatus: 'GPS UNAVAILABLE', gpsStatusMessage: err2.message }));
+              });
+          },
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
     );
-  }, [startGeolocationWatcher]);
+  }, [startGeolocationWatcher, session.currentLocation]);
 
   // DEV ONLY: Explicitly start simulated GPS mode (clearly segregated for development/demo testing)
   const startDevSimulatedExpedition = useCallback((customAdventureName?: string) => {
@@ -611,13 +831,14 @@ export function useExplorationSession() {
     }
     setIsSimulatingWalk(false);
     lastReadingRef.current = null;
+    resetExplorationPoints();
 
     const defaultTier = getScanPowerTierConfig(0);
     setSession((prev) => ({
       id: `exp-${Date.now()}`,
       state: 'IDLE',
       origin: null,
-      currentLocation: null,
+      currentLocation: prev.currentLocation,
       distanceExplored: 0,
       maxDistanceReached: 0,
       speedMps: 0,
@@ -631,7 +852,7 @@ export function useExplorationSession() {
       breadcrumbs: [],
       startedAt: Date.now(),
       isSimulated: false,
-      explorationPoints: prev.explorationPoints ?? 0,
+      explorationPoints: 0,
       sessionPointsEarned: 0,
       claimedMilestones: [],
       currentScanTier: defaultTier.tier,
@@ -639,6 +860,16 @@ export function useExplorationSession() {
       currentScanPowerBonus: defaultTier.powerBonusPercent,
     }));
     setDiscoveryZones([]);
+  }, []);
+
+  // Action: Reset All Points to 0 (Fresh mobile walk testing)
+  const resetAllPointsToZero = useCallback(() => {
+    resetExplorationPoints();
+    setSession((prev) => ({
+      ...prev,
+      explorationPoints: 0,
+      sessionPointsEarned: 0,
+    }));
   }, []);
 
   // Action: Enter Scan Mode (User tapped [SCAN OBJECT] while stationary)
@@ -673,8 +904,8 @@ export function useExplorationSession() {
   const simulateWalkStep = useCallback((metersToAdd: number) => {
     setSession((prev) => {
       const origin = prev.origin || {
-        latitude: DEFAULT_DEMO_COORDINATES.latitude,
-        longitude: DEFAULT_DEMO_COORDINATES.longitude,
+        latitude: prev.currentLocation?.latitude || DEFAULT_DEMO_COORDINATES.latitude,
+        longitude: prev.currentLocation?.longitude || DEFAULT_DEMO_COORDINATES.longitude,
         timestamp: Date.now(),
         label: 'Expedition Origin',
       };
@@ -822,5 +1053,7 @@ export function useExplorationSession() {
     getDiscoveryContext,
     isInIframe: typeof window !== 'undefined' && window.self !== window.top,
     clearPermissionError: () => setPermissionError(null),
+    resetAllPointsToZero,
+    nearbyPlayers,
   };
 }

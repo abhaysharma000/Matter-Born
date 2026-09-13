@@ -8,7 +8,8 @@ import {
   Crown,
   Compass,
   Anvil,
-  Zap
+  Zap,
+  Wifi
 } from 'lucide-react';
 import { PlatformUser } from '../../types/platform';
 import { getExplorationPoints } from '../../utils/forgeManager';
@@ -24,6 +25,7 @@ interface NavbarProps {
   onToggleSound: () => void;
   pendingQuestsCount: number;
   onOpenPass?: () => void;
+  onOpenServerSettings?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,6 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   soundEnabled,
   onToggleSound,
   onOpenPass,
+  onOpenServerSettings,
 }) => {
   const [ep, setEp] = useState<number>(getExplorationPoints());
 
@@ -49,22 +52,22 @@ export const Navbar: React.FC<NavbarProps> = ({
     };
   }, []);
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#0D2E21]/95 backdrop-blur-xl border-b border-[#1B523B] px-4 sm:px-6 py-3 select-none transition-colors">
-      <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-40 w-full bg-[#E2ECE4]/95 backdrop-blur-xl border-b border-[#CADCD0] px-3 sm:px-6 py-2 sm:py-3 select-none transition-colors shadow-xs">
+      <div className="max-w-5xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
         
         {/* Left: Brand / Logo */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3 sm:gap-6 min-w-0">
           <button
             onClick={() => onSelectTab('games')}
-            className="flex items-center gap-2.5 group transition-transform active:scale-95 text-left cursor-pointer"
+            className="flex items-center gap-2 group transition-transform active:scale-95 text-left cursor-pointer min-w-0"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-md shadow-emerald-500/20">
-              <div className="w-full h-full rounded-[10px] bg-[#071912] flex items-center justify-center">
-                <Bot className="w-5 h-5 text-emerald-400 group-hover:rotate-12 transition-transform" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 p-0.5 shadow-md shadow-emerald-600/20 shrink-0">
+              <div className="w-full h-full rounded-[10px] bg-[#0E3323] flex items-center justify-center">
+                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-300 group-hover:rotate-12 transition-transform" />
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-heading font-black text-lg sm:text-xl tracking-wider text-white">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-heading font-black text-sm sm:text-xl tracking-wider text-[#0E3323] truncate">
                 Matter-Born
               </span>
             </div>
@@ -77,7 +80,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'games'
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-black'
-                  : 'text-[#8BA996] hover:text-white hover:bg-[#123024]'
+                  : 'text-[#2B5742] hover:text-[#0E3323] hover:bg-[#D5E3D8]'
               }`}
             >
               <Swords className="w-3.5 h-3.5" />
@@ -89,10 +92,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'expedition'
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-black'
-                  : 'text-[#8BA996] hover:text-white hover:bg-[#123024]'
+                  : 'text-[#2B5742] hover:text-[#0E3323] hover:bg-[#D5E3D8]'
               }`}
             >
-              <Compass className="w-3.5 h-3.5 text-amber-400" />
+              <Compass className="w-3.5 h-3.5 text-amber-600" />
               <span>Explore</span>
             </button>
 
@@ -101,10 +104,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'forge'
                   ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30 font-black'
-                  : 'text-[#8BA996] hover:text-white hover:bg-[#123024]'
+                  : 'text-[#2B5742] hover:text-[#0E3323] hover:bg-[#D5E3D8]'
               }`}
             >
-              <Anvil className="w-3.5 h-3.5 text-amber-400" />
+              <Anvil className="w-3.5 h-3.5 text-amber-600" />
               <span>Forge</span>
             </button>
 
@@ -127,44 +130,57 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right Section: Currencies, Audio, Profile */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           
           {/* Exploration Points (EP) for The Forge */}
           <button
             onClick={() => onSelectTab('forge')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-950/80 to-amber-900/80 hover:from-amber-900 hover:to-amber-800 border border-amber-500/50 text-xs font-black text-amber-300 transition-colors shadow-sm active:scale-95 cursor-pointer"
+            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-gradient-to-r from-amber-100 to-amber-200 hover:from-amber-200 hover:to-amber-300 border border-amber-400/80 text-[11px] sm:text-xs font-black text-amber-950 transition-colors shadow-xs active:scale-95 cursor-pointer shrink-0"
             title="Exploration Points (EP) - Click to upgrade your mech in The Forge"
           >
-            <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400 animate-pulse" />
+            <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-600 fill-amber-500 animate-pulse" />
             <span className="font-mono">{ep.toLocaleString()}</span>
-            <span className="text-[10px] text-amber-400 font-sans font-black">EP</span>
+            <span className="text-[9px] sm:text-[10px] text-amber-800 font-sans font-black">EP</span>
           </button>
 
           {/* Gems */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#0E2A1F] border border-[#1E5C44] text-xs font-bold text-emerald-200">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#DCE8DE] border border-[#CADCD0] text-xs font-bold text-[#0E3323]">
             <span className="text-sm">💎</span>
             <span>{user.gems.toLocaleString()}</span>
           </div>
 
+          {/* Wi-Fi LAN Server Settings */}
+          <button
+            id="navbar-wifi-server-btn"
+            onClick={onOpenServerSettings}
+            className="p-1.5 sm:p-2 rounded-xl bg-[#DCE8DE] hover:bg-[#D3E0D6] border border-[#CADCD0] text-emerald-800 hover:text-emerald-950 transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+            title="Wi-Fi LAN Server Settings & Teammates"
+          >
+            <Wifi className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" />
+            <span className="hidden md:inline text-[10px] font-black uppercase tracking-wider">LAN</span>
+          </button>
+
           {/* Audio toggle */}
           <button
             onClick={onToggleSound}
-            className="p-2 rounded-xl bg-[#0E2A1F] hover:bg-[#153D2D] border border-[#1E5C44] text-[#8BA996] hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl bg-[#DCE8DE] hover:bg-[#D3E0D6] border border-[#CADCD0] text-[#2B5742] hover:text-[#0E3323] transition-colors cursor-pointer"
             title={soundEnabled ? 'Mute Sound' : 'Unmute Sound'}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-stone-500" />}
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" /> : <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-stone-400" />}
           </button>
 
           {/* Player Avatar */}
           <button
+            id="navbar-profile-btn"
+            data-testid="navbar-profile-btn"
             onClick={onOpenProfile}
-            className="flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-xl bg-[#0E2A1F] hover:bg-[#153D2D] border border-[#1E5C44] transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 pl-1 pr-1.5 sm:pl-1.5 sm:pr-2.5 py-1 rounded-xl bg-[#DCE8DE] hover:bg-[#D3E0D6] border border-[#CADCD0] transition-colors cursor-pointer"
             title="View Profile & Stats"
           >
-            <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-black">
+            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-[10px] sm:text-xs font-black">
               {user.name.charAt(0).toUpperCase()}
             </div>
-            <span className="text-xs font-bold text-emerald-200">
+            <span className="hidden xs:inline text-xs font-bold text-[#0E3323]">
               Lv.{user.level}
             </span>
           </button>

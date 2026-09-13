@@ -1,4 +1,4 @@
-export type GameMode = 'classic' | 'rush' | 'royale';
+export type GameMode = 'easy' | 'moderate' | 'hard' | 'classic' | 'rush' | 'royale';
 export type GameState = 'menu' | 'playing' | 'paused' | 'gameover' | 'victory';
 
 export interface SkinConfig {

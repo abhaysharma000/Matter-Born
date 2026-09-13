@@ -14,7 +14,7 @@ import {
 } from '../types/creature';
 import { Creature3DBuilder, Creature3DModel } from './Creature3DBuilder';
 import { getCreatureWeaponType, createWeaponProjectileMesh, WEAPON_SKILL_METAS } from './weaponSkillConfig';
-import { RIVAL_OBJECT_CREATURES } from '../data/creaturePresets';
+import { RIVAL_OBJECT_CREATURES, STARTER_TEMPLATE_ROBOT } from '../data/creaturePresets';
 import { detectRealWorldEnvironment } from '../data/environmentPresets';
 import { deriveCombatDna } from '../utils/combatDnaDerivation';
 import { sound } from '../utils/audio';
@@ -28,6 +28,9 @@ import {
 } from '../types/tacticalDirector';
 import { ForgeCombatBonuses, ForgeUpgradesState } from '../types/forge';
 import { getForgeUpgrades, getForgeCombatBonuses } from '../utils/forgeManager';
+import { createGrassCanvasTexture, buildArenaFlora, ArenaFloraSystem, ArenaTree, ArenaBush } from './ArenaFlora';
+import { multiplayerManager, getOrCreatePlayerId } from '../utils/multiplayerManager';
+import { CombatSyncPacket, DamageSyncEvent, RoomMember, FriendProfile } from '../types/multiplayer';
 
 export interface ArenaHUDState {
   playerHp: number;
@@ -80,6 +83,8 @@ export interface ArenaHUDState {
   playerDefenseBuffActive?: boolean;
   combatDna?: CombatDNA;
   activeDerivedMechanics?: DerivedMechanic[];
+  friendCombatantsCount?: number;
+  friendNames?: string[];
   // Adaptive Gemini Combat Director
   tacticalPolicy?: TacticalPolicy;
   recentAdaptationEvent?: TacticalAdaptationEvent | null;
@@ -87,6 +92,18 @@ export interface ArenaHUDState {
   tacticalAdaptationHistory?: TacticalAdaptationEvent[];
   // Permanent Forge Upgrades Combat System
   forgeBonuses?: ForgeCombatBonuses;
+  // Natural Biome & Tactical Foliage
+  isHidingInBush?: boolean;
+  radarBushes?: Array<{
+    x: number;
+    z: number;
+    radius: number;
+  }>;
+  radarTrees?: Array<{
+    x: number;
+    z: number;
+  }>;
+  gameMode?: 'easy' | 'moderate' | 'hard';
 }
 
 export class ThreeArenaEngine {
@@ -95,6 +112,11 @@ export class ThreeArenaEngine {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer | null = null;
   private animationFrameId: number | null = null;
+
+  // Natural Biome & Tactical Cover System
+  public floraSystem: ArenaFloraSystem | null = null;
+  public isPlayerHidingInBush: boolean = false;
+  private wasPlayerHidingInBush: boolean = false;
 
   // Permanent Forge Upgrades Combat State
   private activeForgeUpgrades: ForgeUpgradesState = getForgeUpgrades();
@@ -124,6 +146,7 @@ export class ThreeArenaEngine {
   public materialAdvantageNotice: string = '';
   public lastVoiceCommand: string = '';
   private playerVelocity = { x: 0, z: 0 };
+  private aiThoughtTimer: number = 0;
 
   // Arena Geometry
   public readonly arenaRadius = 100;
@@ -147,9 +170,13 @@ export class ThreeArenaEngine {
   // Match State
   public isRunning = false;
   public isPaused = false;
+  public gameMode: 'easy' | 'moderate' | 'hard' = 'easy';
   private startTime = 0;
   private matchDuration = 0;
   private combatLogs: string[] = [];
+  private isDestroyed = false;
+  private friendCombatantsCount = 0;
+  private friendNames: string[] = [];
 
   // Input Vector (from Joystick or Keyboard)
   public inputVector = { x: 0, z: 0 };
@@ -159,6 +186,24 @@ export class ThreeArenaEngine {
   public isJumpPressed = false;
   private lastAbilityWasPressed = false;
   private lastAbilityWarningTime = 0;
+
+  // 360° Free Camera Look (Mouse / Touch Look Joystick)
+  public cameraYaw: number = 0;
+  public cameraPitch: number = 0.52;
+
+  // Multiplayer Room Combat Synchronization
+  public isMultiplayer: boolean = false;
+  public multiplayerRoomCode: string | null = null;
+  private localPlayerId: string = '';
+  private lastCombatPacketSendTime: number = 0;
+  private remoteFighterTargets: Map<string, { x: number; y: number; z: number; rot: number }> = new Map();
+
+  public rotateCamera(deltaYaw: number, deltaPitch: number) {
+    this.cameraYaw += deltaYaw;
+    while (this.cameraYaw > Math.PI) this.cameraYaw -= Math.PI * 2;
+    while (this.cameraYaw < -Math.PI) this.cameraYaw += Math.PI * 2;
+    this.cameraPitch = Math.max(0.12, Math.min(1.20, this.cameraPitch + deltaPitch));
+  }
 
   // Callbacks
   private onHUDUpdateCallback?: (state: ArenaHUDState) => void;
@@ -263,21 +308,21 @@ export class ThreeArenaEngine {
       const mat = this.arenaFloorMesh.material as THREE.MeshStandardMaterial;
       if (mat) {
         if (env.weather === 'thunderstorm' || env.weather === 'rain') {
-          mat.color.set('#cbd5e1'); // Reflective light silvery-slate wet puddle floor
-          mat.roughness = 0.15;
-          mat.metalness = 0.6;
-        } else if (env.weather === 'heatwave') {
-          mat.color.set('#fef3c7'); // Bright sunlit golden dune arena
+          mat.color.set('#8ab898'); // Deep reflective rain-drenched grass
           mat.roughness = 0.45;
-          mat.metalness = 0.15;
+          mat.metalness = 0.2;
+        } else if (env.weather === 'heatwave') {
+          mat.color.set('#fde68a'); // Sun-scorched golden savanna turf
+          mat.roughness = 0.88;
+          mat.metalness = 0.05;
         } else if (env.weather === 'blizzard') {
-          mat.color.set('#f8fafc'); // Pure glacier snow-white arena
-          mat.roughness = 0.2;
-          mat.metalness = 0.35;
+          mat.color.set('#e2e8f0'); // Frosted snow-dusted meadow
+          mat.roughness = 0.6;
+          mat.metalness = 0.15;
         } else {
-          mat.color.set('#f1f5f9'); // Clean light titanium-ceramic floor
-          mat.roughness = 0.35;
-          mat.metalness = 0.25;
+          mat.color.set('#ffffff'); // Pure natural lush emerald grass
+          mat.roughness = 0.82;
+          mat.metalness = 0.08;
         }
       }
     }
@@ -382,12 +427,14 @@ export class ThreeArenaEngine {
   }
 
   private setupArenaWorld() {
-    // 1. Futuristic Grand Platform (Radius 100 - Nearly 3x area for epic mobile 3D combat)
+    // 1. Lush Emerald Natural Battlefield (Radius 100 with procedural grass texture)
     const floorGeo = new THREE.CylinderGeometry(this.arenaRadius, this.arenaRadius + 4, 6, 64);
+    const grassTexture = createGrassCanvasTexture();
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0xf8fafc, // High-durability titanium-ceramic composite (Slate 50)
-      roughness: 0.32,
-      metalness: 0.22,
+      color: 0xffffff,
+      map: grassTexture,
+      roughness: 0.82,
+      metalness: 0.08,
     });
     this.arenaFloorMesh = new THREE.Mesh(floorGeo, floorMat);
     this.arenaFloorMesh.position.y = -3;
@@ -621,6 +668,10 @@ export class ThreeArenaEngine {
       const beamMesh = new THREE.Mesh(beamGeo, beamMat);
       this.scene.add(beamMesh);
     }
+
+    // 4. LUSH NATURE BIOME: 4,200 3D Grass Tufts, 12 Tactical Cover Trees, 16 Hiding Bushes
+    this.floraSystem = buildArenaFlora(this.arenaRadius);
+    this.scene.add(this.floraSystem.floraGroup);
   }
 
   public initRenderer(container: HTMLElement) {
@@ -701,15 +752,52 @@ export class ThreeArenaEngine {
     this.currentTacticalPolicy = this.tacticalDirector.getCurrentPolicy();
   }
 
-  // Start a new 3D Battle Arena Match
-  public startMatch(playerCreature: BattleCreature, opponentCount = 6) {
+  // Start a new 3D Battle Arena Match (Friends + AI-Integrated NPCs + 1 Player)
+  public startMatch(
+    playerCreature: BattleCreature, 
+    opponentCount = 10, 
+    mode: string = 'easy',
+    friendFighters: FriendProfile[] = []
+  ) {
+    const mappedMode: 'easy' | 'moderate' | 'hard' =
+      mode === 'hard' || mode === 'royale'
+        ? 'hard'
+        : mode === 'moderate' || mode === 'rush'
+        ? 'moderate'
+        : 'easy';
+    this.gameMode = mappedMode;
     this.cleanupCombatEntities();
     this.refreshForgeUpgrades();
+    this.friendCombatantsCount = friendFighters.length;
+    this.friendNames = friendFighters.map(f => f.name);
+
+    // 1. Initialize Player Fighter safely
+    const fallbackTemplate = STARTER_TEMPLATE_ROBOT;
+    const safePlayerCreature: BattleCreature = {
+      ...fallbackTemplate,
+      ...(playerCreature || {}),
+      name: playerCreature?.name || fallbackTemplate.name,
+      stats: {
+        ...fallbackTemplate.stats,
+        ...(playerCreature?.stats || {}),
+      },
+      visualParams: {
+        ...fallbackTemplate.visualParams,
+        ...(playerCreature?.visualParams || {}),
+      },
+      specialAbility: playerCreature?.specialAbility || fallbackTemplate.specialAbility,
+    };
+    playerCreature = safePlayerCreature;
 
     this.startTime = performance.now();
     this.matchDuration = 0;
     this.dangerZoneRadius = this.arenaRadius;
-    this.combatLogs = [`Match commenced! You spawned as ${playerCreature.name}.`];
+    this.cameraYaw = 0;
+    this.cameraPitch = 0.52;
+    const squadLog = friendFighters.length > 0
+      ? ` 👥 Friend Arena Active: ${friendFighters.map(f => f.name).join(' & ')} spawned in combat positions!`
+      : ` 10 AI Agents Active.`;
+    this.combatLogs = [`Match commenced [Difficulty: ${mappedMode.toUpperCase()}]! You spawned as ${playerCreature.name}.${squadLog}`];
 
     // Reset Adaptive Gemini Tactical Director
     this.combatObserver.reset();
@@ -718,9 +806,8 @@ export class ThreeArenaEngine {
     this.recentAdaptationEvent = null;
     this.tacticalAdaptationHistory = [];
 
-    // 1. Initialize Player Fighter (Boosted HP pool for sustained battle endurance + Forge Alloy Armor)
-    const hpMultiplier = this.forgeBonuses.healthMultiplier;
-    const playerBaseHp = Math.round(playerCreature.stats.hp * 1.5 * hpMultiplier);
+    const effectiveHp = (playerCreature.stats?.hp || 1000) + (this.forgeBonuses.healthAdd || 0);
+    const playerBaseHp = Math.round(effectiveHp * 1.5);
     const playerCombatDna = playerCreature.combatDna || deriveCombatDna(playerCreature);
     playerCreature.combatDna = playerCombatDna;
 
@@ -754,22 +841,70 @@ export class ThreeArenaEngine {
     this.fighters = [this.playerFighter];
     this.buildFighter3DModel(this.playerFighter);
 
-    // 2. Spawn AI Opponents across the wide platform
+    // 2. Spawn 10 Dedicated Combat Entities (Friends take the first NPC slots, remaining are AI-Integrated NPCs)
+    const AI_ROLES = [
+      { tag: 'AI #1', role: 'Flanker', archetype: 'Tactical Flanker' },
+      { tag: 'AI #2', role: 'Bush Stalker', archetype: 'Stealth Ambush Hunter' },
+      { tag: 'AI #3', role: 'Titan Colossus', archetype: 'Heavy Juggernaut' },
+      { tag: 'AI #4', role: 'Sniper Scout', archetype: 'Ballistic Marksman' },
+      { tag: 'AI #5', role: 'Particle Cyclops', archetype: 'Energy Disruptor' },
+      { tag: 'AI #6', role: 'Bio-Scavenger', archetype: 'Orb Harvester & Healer' },
+      { tag: 'AI #7', role: 'Apex Berserker', archetype: 'Overdrive Rusher' },
+      { tag: 'AI #8', role: 'Vortex Controller', archetype: 'Singularity Saboteur' },
+      { tag: 'AI #9', role: 'Aero Dasher', archetype: 'Aerial Evader' },
+      { tag: 'AI #10', role: 'Chronos Prime', archetype: 'Adaptive Counter-AI' },
+    ];
+
     const availableRivals = [...RIVAL_OBJECT_CREATURES];
     for (let i = 0; i < opponentCount; i++) {
-      const template = availableRivals[i % availableRivals.length];
-      const rivalCombatDna = template.combatDna || deriveCombatDna(template);
-      const rivalCreature: BattleCreature = {
-        ...template,
-        id: `opponent-${i}-${Date.now()}`,
-        name: `${template.name} ${['Alpha', 'Prime', 'Mk.II', 'Viper', 'Omega'][i % 5]}`,
-        combatDna: rivalCombatDna,
-      };
+      let rivalCreature: BattleCreature;
+      let rivalCombatDna: CombatDNA;
+      let fighterId = `fighter-ai-${i}`;
+      let startingLevel = 1;
+
+      // If friends are invited to Friend Arena, spawn them in the position of the first NPCs
+      if (i < friendFighters.length) {
+        const friend = friendFighters[i];
+        fighterId = `fighter-friend-${friend.id}`;
+        startingLevel = friend.level || 1;
+        const template = availableRivals[i % availableRivals.length];
+        const baseDna = template.combatDna || deriveCombatDna(template);
+
+        rivalCreature = {
+          ...template,
+          id: `friend-${friend.id}-${Date.now()}`,
+          name: `⭐ [Friend] ${friend.name}`,
+          visualParams: {
+            ...template.visualParams,
+            primaryColor: friend.faction === 'Autobot' ? '#3b82f6' : '#ef4444',
+          },
+          stats: {
+            ...template.stats,
+            hp: Math.round(template.stats.hp * (1 + (startingLevel - 1) * 0.1)),
+            attack: Math.round(template.stats.attack * (1 + (startingLevel - 1) * 0.08)),
+            defense: Math.round(template.stats.defense * (1 + (startingLevel - 1) * 0.08)),
+          },
+          combatDna: {
+            ...baseDna,
+          },
+        };
+        rivalCombatDna = rivalCreature.combatDna;
+      } else {
+        const template = availableRivals[i % availableRivals.length];
+        rivalCombatDna = template.combatDna || deriveCombatDna(template);
+        const aiRole = AI_ROLES[i % AI_ROLES.length];
+        rivalCreature = {
+          ...template,
+          id: `opponent-${i}-${Date.now()}`,
+          name: `🤖 [${aiRole.tag}] ${template.name}`,
+          combatDna: rivalCombatDna,
+        };
+      }
 
       const angle = (i * Math.PI * 2) / opponentCount + (Math.random() - 0.5) * 0.4;
-      const dist = 32 + Math.random() * 45;
+      const dist = 30 + Math.random() * 46;
       const opponentFighter: ActiveFighter = {
-        id: `fighter-ai-${i}`,
+        id: fighterId,
         creature: rivalCreature,
         combatDna: rivalCombatDna,
         isPlayer: false,
@@ -781,7 +916,7 @@ export class ThreeArenaEngine {
         maxHp: rivalCreature.stats.hp,
         currentEnergy: 100,
         maxEnergy: 100,
-        level: 1,
+        level: startingLevel,
         kills: 0,
         attackCooldown: 1.0 + Math.random() * 1.5,
         abilityCooldown: 2.5 + Math.random() * 4,
@@ -811,6 +946,155 @@ export class ThreeArenaEngine {
     this.tick();
   }
 
+  // Enable Real-Time Multiplayer Room Combat Synchronization
+  public enableMultiplayer(roomCode: string, players?: RoomMember[]) {
+    this.isMultiplayer = true;
+    this.multiplayerRoomCode = roomCode;
+    this.localPlayerId = getOrCreatePlayerId();
+
+    this.combatLogs.push(`🌐 MULTIPLAYER LINK ACTIVE: Room [${roomCode}] synchronized!`);
+
+    // Spawn remote human players if provided
+    if (Array.isArray(players)) {
+      players.forEach((p, idx) => {
+        if (p.id !== this.localPlayerId && !this.fighters.some((f) => f.id === p.id)) {
+          this.spawnRemoteHumanFighter(p, idx);
+        }
+      });
+    }
+
+    // Subscribe to 20 FPS combat sync loop
+    multiplayerManager.startCombatSync(
+      roomCode,
+      (packet: CombatSyncPacket) => {
+        this.handleIncomingCombatPacket(packet);
+      },
+      (damage: DamageSyncEvent) => {
+        this.handleIncomingDamageEvent(damage);
+      }
+    );
+  }
+
+  private spawnRemoteHumanFighter(player: { id: string; name: string; creature?: BattleCreature }, index: number = 0) {
+    const raw = player.creature;
+    const fallbackTemplate = RIVAL_OBJECT_CREATURES[index % RIVAL_OBJECT_CREATURES.length] || STARTER_TEMPLATE_ROBOT;
+    const creature: BattleCreature = {
+      ...fallbackTemplate,
+      ...(raw || {}),
+      name: `👥 [FRIEND] ${player.name || raw?.name || 'Teammate'}`,
+      stats: {
+        ...fallbackTemplate.stats,
+        ...(raw?.stats || {}),
+      },
+      visualParams: {
+        ...fallbackTemplate.visualParams,
+        ...(raw?.visualParams || {}),
+      },
+      specialAbility: raw?.specialAbility || fallbackTemplate.specialAbility,
+    };
+    const angle = (index * Math.PI * 2) / 4 + Math.PI / 4;
+    const dist = 18 + index * 4;
+
+    const remoteFighter: ActiveFighter = {
+      id: player.id,
+      creature,
+      combatDna: creature.combatDna || deriveCombatDna(creature),
+      isPlayer: false,
+      x: Math.cos(angle) * dist,
+      y: 0,
+      z: Math.sin(angle) * dist,
+      rotation: angle + Math.PI,
+      currentHp: creature.stats?.hp || 1000,
+      maxHp: creature.stats?.hp || 1000,
+      currentEnergy: 100,
+      maxEnergy: 100,
+      level: 1,
+      kills: 0,
+      attackCooldown: 0,
+      abilityCooldown: 0,
+      dashCooldown: 0,
+      isDashing: false,
+      isAttacking: false,
+      isCastingAbility: false,
+      isHit: false,
+      isDead: false,
+      invulnerabilityTimer: 0,
+      timeSinceLastDamage: 0,
+    };
+
+    this.fighters.push(remoteFighter);
+    try {
+      this.buildFighter3DModel(remoteFighter);
+    } catch (err) {
+      console.warn('Failed to build 3D model for remote fighter:', err);
+    }
+    this.remoteFighterTargets.set(player.id, {
+      x: remoteFighter.x,
+      y: remoteFighter.y,
+      z: remoteFighter.z,
+      rot: remoteFighter.rotation,
+    });
+  }
+
+  private handleIncomingCombatPacket(packet: CombatSyncPacket) {
+    if (packet.senderId === this.localPlayerId) return;
+
+    let remoteFighter = this.fighters.find((f) => f.id === packet.senderId);
+    if (!remoteFighter) {
+      this.spawnRemoteHumanFighter({
+        id: packet.senderId,
+        name: packet.senderName || `Teammate`,
+        creature: packet.creature,
+      });
+      remoteFighter = this.fighters.find((f) => f.id === packet.senderId);
+    }
+
+    if (remoteFighter && !remoteFighter.isDead) {
+      this.remoteFighterTargets.set(packet.senderId, {
+        x: packet.x,
+        y: packet.y,
+        z: packet.z,
+        rot: packet.rotation,
+      });
+
+      if (packet.currentHp !== undefined) remoteFighter.currentHp = packet.currentHp;
+      if (packet.maxHp !== undefined) remoteFighter.maxHp = packet.maxHp;
+
+      if (packet.isAttacking && !remoteFighter.isAttacking) {
+        this.executeAttack(remoteFighter);
+      }
+      if (packet.isDashing && !remoteFighter.isDashing) {
+        this.executeDash(remoteFighter);
+      }
+      if (packet.attackType === 'special' && !remoteFighter.isCastingAbility) {
+        this.executeSpecialAbility(remoteFighter);
+      }
+
+      remoteFighter.isAttacking = !!packet.isAttacking;
+      remoteFighter.isDashing = !!packet.isDashing;
+      remoteFighter.isCastingAbility = packet.attackType === 'special';
+    }
+  }
+
+  private handleIncomingDamageEvent(damage: DamageSyncEvent) {
+    if (damage.attackerId === this.localPlayerId) return;
+    const target = this.fighters.find((f) => f.id === damage.targetId);
+    if (target && !target.isDead) {
+      target.currentHp = Math.max(0, target.currentHp - damage.damage);
+      const isCrit = !!damage.isCritical;
+      this.damageFloaters.push({
+        id: `floater-net-${Date.now()}-${Math.random()}`,
+        text: `-${Math.round(damage.damage)}${isCrit ? ' CRIT!' : ''}`,
+        x: target.x + (Math.random() - 0.5) * 1.5,
+        y: target.y + 3.2,
+        z: target.z + (Math.random() - 0.5) * 1.5,
+        color: isCrit ? '#F59E0B' : target.isPlayer ? '#EF4444' : '#10B981',
+        isCrit,
+        opacity: 1.0,
+      });
+    }
+  }
+
   private buildFighter3DModel(fighter: ActiveFighter) {
     const model = Creature3DBuilder.buildCreature(fighter.creature);
     model.root.position.set(fighter.x, fighter.y, fighter.z);
@@ -819,6 +1103,7 @@ export class ThreeArenaEngine {
     this.fighterModels.set(fighter.id, model);
 
     // Floating Overhead 3D Health Bar
+    const isFriend = fighter.creature.name.toLowerCase().includes('friend') || fighter.id.startsWith('fighter-friend-') || (!fighter.id.startsWith('fighter-ai-') && !fighter.isPlayer);
     const hpGroup = new THREE.Group();
     const bgBar = new THREE.Mesh(
       new THREE.PlaneGeometry(2.4, 0.28),
@@ -827,13 +1112,58 @@ export class ThreeArenaEngine {
     const fillBar = new THREE.Mesh(
       new THREE.PlaneGeometry(2.3, 0.22),
       new THREE.MeshBasicMaterial({
-        color: fighter.isPlayer ? 0x00e676 : 0xff1744,
+        color: fighter.isPlayer ? 0x00e676 : isFriend ? 0x10b981 : 0xff1744,
         side: THREE.DoubleSide,
       })
     );
     fillBar.position.z = 0.01;
     hpGroup.add(bgBar);
     hpGroup.add(fillBar);
+
+    // Floating Overhead AI or Teammate Agent Tag
+    if (!fighter.isPlayer) {
+      const tagCanvas = document.createElement('canvas');
+      tagCanvas.width = 256;
+      tagCanvas.height = 64;
+      const ctx = tagCanvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'rgba(7, 22, 16, 0.94)';
+        ctx.beginPath();
+        if (typeof (ctx as any).roundRect === 'function') {
+          (ctx as any).roundRect(4, 4, 248, 56, 14);
+        } else {
+          ctx.rect(4, 4, 248, 56);
+        }
+        ctx.fill();
+        ctx.lineWidth = 3;
+        if (isFriend) {
+          ctx.strokeStyle = '#10b981';
+          ctx.stroke();
+          ctx.font = 'bold 22px monospace';
+          ctx.fillStyle = '#6ee7b7';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const cleanName = fighter.creature.name.replace(/.*\[Friend\]\s*/i, '').replace('⭐', '').trim().slice(0, 14);
+          ctx.fillText(`⭐ ${cleanName || 'Friend'}`, 128, 32);
+        } else {
+          ctx.strokeStyle = '#22c55e';
+          ctx.stroke();
+          ctx.font = 'bold 24px monospace';
+          ctx.fillStyle = '#4ade80';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const aiNum = fighter.id.replace('fighter-ai-', '');
+          ctx.fillText(`🤖 AI AGENT #${Number(aiNum) + 1}`, 128, 32);
+        }
+      }
+      const tagTex = new THREE.CanvasTexture(tagCanvas);
+      const tagMat = new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false });
+      const tagSprite = new THREE.Sprite(tagMat);
+      tagSprite.scale.set(3.2, 0.8, 1);
+      tagSprite.position.set(0, 0.68, 0);
+      hpGroup.add(tagSprite);
+    }
+
     const fighterScale = fighter.creature.visualParams?.scale || 1.1;
     hpGroup.position.set(fighter.x, fighter.y + 4.5 * fighterScale, fighter.z);
     this.scene.add(hpGroup);
@@ -871,18 +1201,24 @@ export class ThreeArenaEngine {
 
   // Primary Loop Tick
   private tick = () => {
-    if (!this.isRunning) return;
+    if (!this.isRunning || this.isDestroyed) return;
 
-    if (!this.isPaused) {
-      const dt = 0.016; // 60fps fixed step
-      this.updateSimulation(dt);
+    try {
+      if (!this.isPaused) {
+        const dt = 0.016; // 60fps fixed step
+        this.updateSimulation(dt);
+      }
+
+      if (this.renderer && this.container) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    } catch (err) {
+      console.warn('ThreeArenaEngine render tick error suppressed:', err);
     }
 
-    if (this.renderer && this.container) {
-      this.renderer.render(this.scene, this.camera);
+    if (!this.isDestroyed) {
+      this.animationFrameId = requestAnimationFrame(this.tick);
     }
-
-    this.animationFrameId = requestAnimationFrame(this.tick);
   };
 
   // Main Physics & Combat Simulation
@@ -931,6 +1267,89 @@ export class ThreeArenaEngine {
       }
     }
 
+    // 1c. Multiplayer Combat High-Frequency Sync (20 FPS)
+    if (this.isMultiplayer && this.multiplayerRoomCode && this.playerFighter && !this.playerFighter.isDead) {
+      const now = performance.now();
+      if (now - this.lastCombatPacketSendTime >= 50) {
+        this.lastCombatPacketSendTime = now;
+        multiplayerManager.broadcastCombatState(this.multiplayerRoomCode, {
+          senderId: this.localPlayerId,
+          senderName: this.playerFighter.creature.name,
+          creature: this.playerFighter.creature,
+          x: this.playerFighter.x,
+          y: this.playerFighter.y,
+          z: this.playerFighter.z,
+          rotation: this.playerFighter.rotation,
+          currentHp: this.playerFighter.currentHp,
+          maxHp: this.playerFighter.maxHp,
+          isAttacking: this.isAttackPressed || this.playerFighter.isAttacking,
+          isDashing: this.isDashPressed || this.playerFighter.isDashing,
+          isJumping: this.isJumpPressed,
+          attackType: (this.isAbilityPressed || this.playerFighter.isCastingAbility) ? 'special' : 'normal',
+          timestamp: Date.now(),
+        });
+      }
+
+      // Smoothly interpolate remote players' positions & rotations
+      this.remoteFighterTargets.forEach((target, fighterId) => {
+        const f = this.fighters.find((x) => x.id === fighterId);
+        if (f && !f.isDead) {
+          f.x += (target.x - f.x) * Math.min(1, dt * 14);
+          f.y += (target.y - f.y) * Math.min(1, dt * 14);
+          f.z += (target.z - f.z) * Math.min(1, dt * 14);
+          f.rotation += (target.rot - f.rotation) * Math.min(1, dt * 14);
+
+          const model = this.fighterModels.get(f.id);
+          if (model) {
+            model.root.position.set(f.x, f.y, f.z);
+            model.root.rotation.y = f.rotation;
+          }
+          const hpBar = this.fighterHpBars.get(f.id);
+          if (hpBar) {
+            const fighterScale = f.creature.visualParams?.scale || 1.1;
+            hpBar.position.set(f.x, f.y + 4.5 * fighterScale, f.z);
+          }
+        }
+      });
+    }
+
+    // 1b. Multi-Agent AI Thought Broadcast (Live Multi-Agent Integration)
+    this.aiThoughtTimer += dt;
+    if (this.aiThoughtTimer > 6.5) {
+      this.aiThoughtTimer = 0;
+      const aliveAiBots = this.fighters.filter((f) => !f.isPlayer && !f.isDead);
+      if (aliveAiBots.length > 0) {
+        const randomBot = aliveAiBots[Math.floor(Math.random() * aliveAiBots.length)];
+        const botIndex = Number(randomBot.id.replace('fighter-ai-', '')) + 1;
+        const thoughts = this.gameMode === 'hard' ? [
+          `🤖 [AI Agent #${botIndex}]: [HARD MODE] Swarm protocol: ALL BOTS CONVERGE ON PLAYER!`,
+          `🤖 [AI Agent #${botIndex}]: Player coordinates locked → executing synchronized encirclement!`,
+          `🤖 [AI Agent #${botIndex}]: Full lethal aggression: hunt down player at all costs!`,
+          `🤖 [AI Agent #${botIndex}]: Multi-agent mesh network: swarming player position!`,
+        ] : this.gameMode === 'moderate' ? [
+          `🤖 [AI Agent #${botIndex}]: [MODERATE MODE] Controlled aggression: 1-2 bots targeting player!`,
+          `🤖 [AI Agent #${botIndex}]: Balancing arena skirmishes with tactical player dueling!`,
+          `🤖 [AI Agent #${botIndex}]: Engaging rival AI agent across the perimeter!`,
+        ] : [
+          `🤖 [AI Agent #${botIndex}]: [EASY MODE] Going easy on player → dueling other AI bots!`,
+          `🤖 [AI Agent #${botIndex}]: Breaking off player chase → roaming open field!`,
+          `🤖 [AI Agent #${botIndex}]: Relaxed patrol: training skirmish with other bots!`,
+        ];
+        const chosenThought = thoughts[Math.floor(Math.random() * thoughts.length)];
+        this.combatLogs.push(chosenThought);
+        this.damageFloaters.push({
+          id: `ai-thought-${Date.now()}`,
+          text: `🧠 AI #${botIndex} ADAPTING`,
+          x: randomBot.x,
+          y: randomBot.y + 4.6,
+          z: randomBot.z,
+          color: '#38BDF8',
+          isCrit: false,
+          opacity: 0.95,
+        });
+      }
+    }
+
     // 2. Update Player Movement & Actions with Controlled Mech Pacing
     if (!this.playerFighter.isDead) {
       // Check if player is stunned
@@ -946,8 +1365,23 @@ export class ThreeArenaEngine {
         const mobilityMod = 0.80 + (dna?.mobility ?? 0.5) * 0.40;
         const baseSpeed = this.playerFighter.creature.stats.speed * 0.65 * (isBerserk ? 1.45 : 1.0) * mobilityMod;
         const speed = baseSpeed * (this.playerFighter.isDashing ? 1.65 : 1.0);
-        const targetMoveX = this.inputVector.x * speed;
-        const targetMoveZ = this.inputVector.z * speed;
+
+        // 3D Camera-Relative Movement:
+        // Forward vector from camera towards player on ground plane
+        const camForwardX = -Math.sin(this.cameraYaw);
+        const camForwardZ = -Math.cos(this.cameraYaw);
+        // Right vector perpendicular to forward vector
+        const camRightX = Math.cos(this.cameraYaw);
+        const camRightZ = -Math.sin(this.cameraYaw);
+
+        const moveForward = -this.inputVector.z;
+        const moveRight = this.inputVector.x;
+
+        const worldDirX = camRightX * moveRight + camForwardX * moveForward;
+        const worldDirZ = camRightZ * moveRight + camForwardZ * moveForward;
+
+        const targetMoveX = worldDirX * speed;
+        const targetMoveZ = worldDirZ * speed;
 
         // Traction & ground grip: rubber/sneakers have high traction (0.85-0.95) with sharp responsiveness; heavy iron has higher inertia
         const baseTraction = dna?.traction ?? 0.5;
@@ -976,9 +1410,9 @@ export class ThreeArenaEngine {
           this.playerFighter.y = Math.max(0, this.playerFighter.y + this.playerFighter.jumpVelocityY * dt);
 
           // Agile mid-air steering (air control) while leaping over attacks
-          if (Math.abs(this.inputVector.x) > 0.05 || Math.abs(this.inputVector.z) > 0.05) {
-            this.playerFighter.x += this.inputVector.x * speed * 0.85 * dt;
-            this.playerFighter.z += this.inputVector.z * speed * 0.85 * dt;
+          if (Math.hypot(worldDirX, worldDirZ) > 0.05) {
+            this.playerFighter.x += worldDirX * speed * 0.85 * dt;
+            this.playerFighter.z += worldDirZ * speed * 0.85 * dt;
           }
 
           if (this.playerFighter.y <= 0) {
@@ -993,9 +1427,9 @@ export class ThreeArenaEngine {
           this.addKineticEnergy(dt * 4.5);
         }
 
-        // Rotate player to facing direction
-        if (Math.abs(this.inputVector.x) > 0.05 || Math.abs(this.inputVector.z) > 0.05) {
-          this.playerFighter.rotation = Math.atan2(this.inputVector.x, this.inputVector.z);
+        // Rotate player to facing direction (movement direction, or camera forward)
+        if (Math.hypot(worldDirX, worldDirZ) > 0.05) {
+          this.playerFighter.rotation = Math.atan2(worldDirX, worldDirZ);
         }
 
         // Smooth Elastic Boundary Containment: securely keeps player inside the beautiful perimeter
@@ -1009,6 +1443,10 @@ export class ThreeArenaEngine {
 
         // Actions: Attack - crisp base cooldown compressed by Forge Energon Overdrive
         if (this.isAttackPressed && this.playerFighter.attackCooldown <= 0) {
+          // If standing still when attacking, face the camera look direction
+          if (Math.hypot(worldDirX, worldDirZ) <= 0.05) {
+            this.playerFighter.rotation = Math.atan2(camForwardX, camForwardZ);
+          }
           this.executeAttack(this.playerFighter);
           const baseAttackInterval = isBerserk ? 0.18 : 0.28;
           this.playerFighter.attackCooldown = Math.max(0.08, baseAttackInterval / this.forgeBonuses.fireRateMultiplier);
@@ -1172,6 +1610,83 @@ export class ThreeArenaEngine {
       }
     }
 
+    // 6c. Nature Flora Update & Tree Solid Cover Collisions
+    if (this.floraSystem) {
+      this.floraSystem.update(dt, time);
+
+      // Enforce physical obstacle collision with solid tree trunks
+      for (const fighter of this.fighters) {
+        if (fighter.isDead) continue;
+        for (const tree of this.floraSystem.trees) {
+          const dx = fighter.x - tree.x;
+          const dz = fighter.z - tree.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist < tree.collisionRadius) {
+            const safeDist = dist < 0.001 ? 0.001 : dist;
+            const push = tree.collisionRadius - safeDist;
+            fighter.x += (dx / safeDist) * push;
+            fighter.z += (dz / safeDist) * push;
+          }
+        }
+      }
+
+      // 6d. Tactical Hiding in Foliage Bushes
+      let playerInBush = false;
+      for (const fighter of this.fighters) {
+        if (fighter.isDead) continue;
+        let insideBush = false;
+        for (const bush of this.floraSystem.bushes) {
+          const d = Math.hypot(fighter.x - bush.x, fighter.z - bush.z);
+          if (d < bush.radius) {
+            insideBush = true;
+            break;
+          }
+        }
+
+        if (insideBush) {
+          fighter.stealthDuration = Math.max(fighter.stealthDuration || 0, 0.4);
+          fighter.isStealthed = true;
+          if (fighter.isPlayer) {
+            playerInBush = true;
+          }
+        }
+      }
+
+      this.isPlayerHidingInBush = playerInBush;
+      if (playerInBush && !this.wasPlayerHidingInBush) {
+        this.combatLogs.push('🌿 Camouflaged in Bush: Hidden from enemies! (Next hit deals 2.5x Stealth Crit)');
+        this.damageFloaters.push({
+          id: `bush-stealth-${Date.now()}`,
+          text: '🌿 BUSH CAMOUFLAGE',
+          x: this.playerFighter.x,
+          y: this.playerFighter.y + 3.0,
+          z: this.playerFighter.z,
+          color: '#4ade80',
+          isCrit: true,
+          opacity: 1.0,
+        });
+      }
+      this.wasPlayerHidingInBush = playerInBush;
+
+      // Modulate player model visual opacity when hidden in bush
+      const playerModel = this.fighterModels.get('player');
+      if (playerModel) {
+        const targetOpacity = playerInBush ? 0.55 : 1.0;
+        playerModel.root.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            mats.forEach((m) => {
+              if (m) {
+                m.transparent = playerInBush;
+                m.opacity = targetOpacity;
+              }
+            });
+          }
+        });
+      }
+    }
+
     // 7. Update 3D Visual Models & Overhead HP Bars
     this.fighters.forEach((fighter) => {
       const model = this.fighterModels.get(fighter.id);
@@ -1228,17 +1743,21 @@ export class ThreeArenaEngine {
       }
     });
 
-    // 8. Snappy Third-Person Camera Follow (0.14 lerp for tight tracking)
+    // 8. Snappy Third-Person Camera Follow with 360° Free Look
     if (!this.playerFighter.isDead) {
       const isPortrait = this.camera.aspect < 1.0;
-      const targetCamX = this.playerFighter.x;
-      const targetCamZ = this.playerFighter.z + (isPortrait ? 22 : 18);
-      const targetCamY = isPortrait ? 21 : 17;
+      const baseDist = isPortrait ? 22 : 18;
+      const hDist = baseDist * Math.cos(this.cameraPitch);
+      const vDist = baseDist * Math.sin(this.cameraPitch);
 
-      this.camera.position.x += (targetCamX - this.camera.position.x) * 0.14;
-      this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.14;
-      this.camera.position.y += (targetCamY - this.camera.position.y) * 0.14;
-      this.camera.lookAt(this.playerFighter.x, 2.0, this.playerFighter.z);
+      const targetCamX = this.playerFighter.x + Math.sin(this.cameraYaw) * hDist;
+      const targetCamZ = this.playerFighter.z + Math.cos(this.cameraYaw) * hDist;
+      const targetCamY = Math.max(2.5, this.playerFighter.y + vDist);
+
+      this.camera.position.x += (targetCamX - this.camera.position.x) * 0.18;
+      this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.18;
+      this.camera.position.y += (targetCamY - this.camera.position.y) * 0.18;
+      this.camera.lookAt(this.playerFighter.x, this.playerFighter.y + 2.0, this.playerFighter.z);
     }
 
     // 9. Floating Damage Text Decay
@@ -1303,6 +1822,8 @@ export class ThreeArenaEngine {
         playerDefenseBuffActive: !!(this.playerFighter.defenseBuffDuration && this.playerFighter.defenseBuffDuration > 0),
         combatDna: this.playerFighter.combatDna,
         activeDerivedMechanics: this.playerFighter.combatDna?.derivedMechanics,
+        friendCombatantsCount: this.friendCombatantsCount,
+        friendNames: this.friendNames,
         // Adaptive Gemini Combat Director
         tacticalPolicy: this.currentTacticalPolicy,
         recentAdaptationEvent: this.recentAdaptationEvent,
@@ -1310,6 +1831,18 @@ export class ThreeArenaEngine {
         tacticalAdaptationHistory: this.tacticalAdaptationHistory,
         // Permanent Forge Upgrades Combat System
         forgeBonuses: this.forgeBonuses,
+        // Natural Biome & Tactical Foliage
+        isHidingInBush: this.isPlayerHidingInBush,
+        radarBushes: this.floraSystem?.bushes.map((b) => ({
+          x: b.x,
+          z: b.z,
+          radius: b.radius,
+        })),
+        radarTrees: this.floraSystem?.trees.map((t) => ({
+          x: t.x,
+          z: t.z,
+        })),
+        gameMode: this.gameMode,
       });
     }
   }
@@ -1327,23 +1860,93 @@ export class ThreeArenaEngine {
     // If stunned, AI cannot move or act
     if (fighter.stunDuration && fighter.stunDuration > 0) return;
 
-    // Find closest target (could be player or another AI!), prioritize non-stealthed
+    // Find target based on game mode:
+    // - Easy: NPCs go easy on player (bots fight each other, wander, disengage when far, slower attack cadence, relaxed speed)
+    // - Moderate: Few NPCs target player (at most 1-2 bots at a time), other bots duel each other in balanced skirmishes
+    // - Hard: All NPCs relentlessly hunt and try to kill the player
     let closestTarget: ActiveFighter | null = null;
     let minDist = 999;
 
-    this.fighters.forEach((other) => {
-      if (other.id === fighter.id || other.isDead) return;
-      // Stealth check: only target stealthed if within 3.5 units detection radius
-      if (other.isStealthed) {
-        const d = Math.hypot(other.x - fighter.x, other.z - fighter.z);
-        if (d > 3.5) return;
+    const aliveOtherBots = this.fighters.filter(
+      (other) => !other.isPlayer && !other.isDead && other.id !== fighter.id
+    );
+    const isPlayerAlive = this.playerFighter && !this.playerFighter.isDead;
+    const distToPlayer = isPlayerAlive
+      ? Math.hypot(this.playerFighter.x - fighter.x, this.playerFighter.z - fighter.z)
+      : 9999;
+
+    if (this.gameMode === 'hard') {
+      // HARD MODE: All NPCs relentlessly hunt and swarm the player!
+      if (isPlayerAlive) {
+        closestTarget = this.playerFighter;
+        minDist = distToPlayer;
+      } else {
+        aliveOtherBots.forEach((other) => {
+          if (other.isStealthed) {
+            const d = Math.hypot(other.x - fighter.x, other.z - fighter.z);
+            if (d > 3.5) return;
+          }
+          const d = Math.hypot(other.x - fighter.x, other.z - fighter.z);
+          if (d < minDist) {
+            minDist = d;
+            closestTarget = other;
+          }
+        });
       }
-      const d = Math.hypot(other.x - fighter.x, other.z - fighter.z);
-      if (d < minDist) {
-        minDist = d;
-        closestTarget = other;
+    } else if (this.gameMode === 'moderate') {
+      // MODERATE MODE: Only a few NPCs target player (max 2 bots at once), remaining bots duel each other!
+      const sortedByProximityToPlayer = [...aliveOtherBots, fighter].sort((a, b) => {
+        const da = Math.hypot(this.playerFighter.x - a.x, this.playerFighter.z - a.z);
+        const db = Math.hypot(this.playerFighter.x - b.x, this.playerFighter.z - b.z);
+        return da - db;
+      });
+
+      const isOneOfFewTargetingPlayer =
+        sortedByProximityToPlayer.slice(0, 2).some((b) => b.id === fighter.id);
+
+      if (isPlayerAlive && (isOneOfFewTargetingPlayer || aliveOtherBots.length === 0)) {
+        closestTarget = this.playerFighter;
+        minDist = distToPlayer;
+      } else {
+        // Target closest other AI bot
+        aliveOtherBots.forEach((other) => {
+          if (other.isStealthed) {
+            const d = Math.hypot(other.x - fighter.x, other.z - fighter.z);
+            if (d > 3.5) return;
+          }
+          const d = Math.hypot(other.x - fighter.x, other.z - fighter.z);
+          if (d < minDist) {
+            minDist = d;
+            closestTarget = other;
+          }
+        });
       }
-    });
+    } else {
+      // EASY MODE: NPCs go easy on player
+      // Bots prioritize fighting each other. Only target player if no other bots remain or player is within close melee range (< 4.5 units)
+      if (aliveOtherBots.length > 0) {
+        aliveOtherBots.forEach((other) => {
+          if (other.isStealthed) {
+            const d = Math.hypot(other.x - fighter.x, other.z - fighter.z);
+            if (d > 3.5) return;
+          }
+          const d = Math.hypot(other.x - fighter.x, other.z - fighter.z);
+          if (d < minDist) {
+            minDist = d;
+            closestTarget = other;
+          }
+        });
+
+        // Only lightly engage player if player steps within 4.5 units and no other bot is nearby
+        if (isPlayerAlive && distToPlayer < 4.5 && (!closestTarget || minDist > 12)) {
+          closestTarget = this.playerFighter;
+          minDist = distToPlayer;
+        }
+      } else if (isPlayerAlive) {
+        closestTarget = this.playerFighter;
+        minDist = distToPlayer;
+      }
+    }
 
     if (closestTarget) {
       const target = closestTarget as ActiveFighter;
@@ -1363,6 +1966,24 @@ export class ThreeArenaEngine {
       const policy = this.currentTacticalPolicy;
       const isTargetingPlayer = target.isPlayer;
 
+      // Mode-based NPC movement scaling:
+      if (isTargetingPlayer) {
+        if (this.gameMode === 'easy') {
+          speed *= 0.65; // Easy: Bot moves casually and gently
+        } else if (this.gameMode === 'hard') {
+          speed *= 1.22; // Hard: Relentless fast hunt sprint!
+        }
+      }
+
+      // Easy Mode: If bot is targeting player but player moved > 7.5 units away, bot breaks off pursuit!
+      if (this.gameMode === 'easy' && isTargetingPlayer && distToPlayer > 7.5 && aliveOtherBots.length > 0) {
+        const wanderAngle = fighter.rotation + Math.PI * 0.8 + (Math.random() - 0.5) * 0.6;
+        fighter.x += Math.sin(wanderAngle) * speed * 0.5 * dt;
+        fighter.z += Math.cos(wanderAngle) * speed * 0.5 * dt;
+        fighter.rotation = wanderAngle;
+        return;
+      }
+
       // When targeting player, apply Tactical Policy parameters
       const preferredRange = (isTargetingPlayer && policy) ? policy.preferredRange : 3.5;
       const cadenceMod = (isTargetingPlayer && policy) ? policy.attackCadenceMultiplier : 1.0;
@@ -1370,15 +1991,15 @@ export class ThreeArenaEngine {
 
       if (isTargetingPlayer && policy) {
         if (policy.strategy === 'AGGRESSIVE_RUSH') {
-          speed *= 1.25; // 25% speed sprint
+          speed *= 1.25;
         } else if (policy.strategy === 'DEFENSIVE') {
           speed *= 0.90;
         }
       }
 
       // Movement behavior:
-      // A. Critical HP retreat (unless Berserk or AGGRESSIVE_RUSH)
-      if (fighter.currentHp < fighter.maxHp * 0.20 && minDist < 10 && !isBerserk && (!policy || policy.strategy !== 'AGGRESSIVE_RUSH')) {
+      // A. Critical HP retreat (unless Berserk, AGGRESSIVE_RUSH, or Hard mode where bots fight to the death)
+      if (fighter.currentHp < fighter.maxHp * 0.20 && minDist < 10 && !isBerserk && this.gameMode !== 'hard' && (!policy || policy.strategy !== 'AGGRESSIVE_RUSH')) {
         fighter.x -= Math.sin(angleToTarget) * speed * dt;
         fighter.z -= Math.cos(angleToTarget) * speed * dt;
       } 
@@ -1387,11 +2008,12 @@ export class ThreeArenaEngine {
         fighter.x += Math.sin(angleToTarget) * speed * dt;
         fighter.z += Math.cos(angleToTarget) * speed * dt;
 
-        // AGGRESSIVE_RUSH: rapid dash forward to close gap!
-        if (isTargetingPlayer && policy?.strategy === 'AGGRESSIVE_RUSH' && minDist > 6.0 && fighter.dashCooldown <= 0 && Math.random() < dashChance * dt * 2.5) {
+        // AGGRESSIVE_RUSH or Hard Mode: rapid dash forward to close gap!
+        const rushDashChance = this.gameMode === 'hard' ? 0.35 : dashChance;
+        if (isTargetingPlayer && (policy?.strategy === 'AGGRESSIVE_RUSH' || this.gameMode === 'hard') && minDist > 5.5 && fighter.dashCooldown <= 0 && Math.random() < rushDashChance * dt * 2.5) {
           fighter.x += Math.sin(angleToTarget) * 4.2;
           fighter.z += Math.cos(angleToTarget) * 4.2;
-          fighter.dashCooldown = 2.4;
+          fighter.dashCooldown = this.gameMode === 'hard' ? 1.6 : 2.4;
           this.damageFloaters.push({
             id: `rush-dash-${Date.now()}`,
             text: '⚡ RUSH DASH',
@@ -1405,7 +2027,7 @@ export class ThreeArenaEngine {
         }
       } 
       // C. Backpedal / retreat if inside preferred range (for KEEP_DISTANCE, EVADE_AND_COUNTER, RANGED_PRESSURE)
-      else if (minDist < preferredRange - 1.2) {
+      else if (minDist < preferredRange - 1.2 && this.gameMode !== 'hard') {
         fighter.x -= Math.sin(angleToTarget) * speed * dt;
         fighter.z -= Math.cos(angleToTarget) * speed * dt;
 
@@ -1441,16 +2063,31 @@ export class ThreeArenaEngine {
       const attackRangeThreshold = (isTargetingPlayer && (policy?.strategy === 'RANGED_PRESSURE' || policy?.strategy === 'KEEP_DISTANCE')) ? 14 : 10;
       if (minDist < attackRangeThreshold && fighter.attackCooldown <= 0) {
         this.executeAttack(fighter);
-        fighter.attackCooldown = (1.3 + Math.random() * 0.7) * cadenceMod * (isBerserk ? 0.75 : 1.0);
+        let cdMultiplier = cadenceMod * (isBerserk ? 0.75 : 1.0);
+        if (isTargetingPlayer) {
+          if (this.gameMode === 'easy') {
+            cdMultiplier *= 1.85; // Easy: Bot attacks player much less often
+          } else if (this.gameMode === 'hard') {
+            cdMultiplier *= 0.65; // Hard: Relentless rapid attack frequency
+          }
+        }
+        fighter.attackCooldown = (1.3 + Math.random() * 0.7) * cdMultiplier;
       }
 
       // Special Ability when ready (cannot cast if silenced)
       const isSilenced = !!(fighter.silenceDuration && fighter.silenceDuration > 0);
       const specialRange = (isTargetingPlayer && policy?.strategy === 'SPECIAL_ABILITY_FOCUS') ? 14 : 12;
       if (minDist < specialRange && fighter.abilityCooldown <= 0 && !isSilenced) {
-        this.executeSpecialAbility(fighter);
+        if (isTargetingPlayer && this.gameMode === 'easy' && Math.random() > 0.40) {
+          // Easy: often spares player from devastating ability attacks
+        } else {
+          this.executeSpecialAbility(fighter);
+        }
         const abilityCdFactor = (isTargetingPlayer && policy?.strategy === 'SPECIAL_ABILITY_FOCUS') ? 0.75 : 1.0;
-        fighter.abilityCooldown = (fighter.creature.specialAbility.cooldown + Math.random() * 2.5) * abilityCdFactor;
+        let modeAbilityCd = (fighter.creature.specialAbility.cooldown + Math.random() * 2.5) * abilityCdFactor;
+        if (isTargetingPlayer && this.gameMode === 'easy') modeAbilityCd *= 1.6;
+        if (isTargetingPlayer && this.gameMode === 'hard') modeAbilityCd *= 0.75;
+        fighter.abilityCooldown = modeAbilityCd;
       }
     }
 
@@ -1472,10 +2109,10 @@ export class ThreeArenaEngine {
     }, 180);
 
     const baseMult = fighter.isPlayer ? 0.90 : 0.40;
-    let bulletDamage = Math.round(fighter.creature.stats.attack * baseMult);
-    if (fighter.isPlayer) {
-      bulletDamage = Math.round(bulletDamage * this.forgeBonuses.damageMultiplier);
-    }
+    const effectiveAtk = fighter.isPlayer
+      ? (fighter.creature.stats.attack + (this.forgeBonuses.damageAdd || 0))
+      : fighter.creature.stats.attack;
+    let bulletDamage = Math.round(effectiveAtk * baseMult);
 
     const weaponType = getCreatureWeaponType(fighter.creature);
     const color = fighter.creature.visualParams.glowColor;
@@ -1848,8 +2485,10 @@ export class ThreeArenaEngine {
     }, 400);
 
     const ability = fighter.creature.specialAbility;
-    const specialMultiplier = fighter.isPlayer ? this.forgeBonuses.specialMultiplier : 1.0;
-    const baseDamage = Math.round((ability.damage || 180) * specialMultiplier);
+    const effectiveSpecial = fighter.isPlayer
+      ? ((ability.damage || 180) + (this.forgeBonuses.specialAdd || 0))
+      : (ability.damage || 180);
+    const baseDamage = Math.round(effectiveSpecial);
     const abilityColor = fighter.creature.visualParams.glowColor || '#2BE29E';
 
     // Intelligently resolve unique special ability effect for every robot:
@@ -2064,6 +2703,7 @@ export class ThreeArenaEngine {
 
       case 'buff_shield': {
         // Optimus Prime: Matrix Bastion Shield
+        const specialMultiplier = fighter.isPlayer ? this.forgeBonuses.specialMultiplier : 1.0;
         const healAmt = Math.round(75 * specialMultiplier);
         const shieldAmt = Math.round(140 * specialMultiplier);
         // 1. Heal caster
@@ -3275,13 +3915,19 @@ export class ThreeArenaEngine {
     // Player health protection: incoming damage reduced and defensive poise active during attacks
     if (fighter.isPlayer) {
       this.combatObserver.recordDamageTaken(amount);
-      modifiedAmount *= 0.45; // 55% base incoming damage mitigation
+      let mitigation = 0.45; // 55% base incoming damage mitigation
+      if (this.gameMode === 'easy') {
+        mitigation *= 0.50; // Easy mode: NPCs go easy on player (50% less damage)
+      } else if (this.gameMode === 'hard') {
+        mitigation *= 1.25; // Hard mode: NPCs hit harder
+      }
+      modifiedAmount *= mitigation;
       if (fighter.isAttacking) {
         // Offensive poise / armor bonus: attack without losing health rapidly
         modifiedAmount *= 0.70;
       }
       fighter.timeSinceLastDamage = 0;
-      fighter.invulnerabilityTimer = 0.50; // 0.50s of invulnerability i-frames
+      fighter.invulnerabilityTimer = this.gameMode === 'easy' ? 0.70 : 0.50;
     } else {
       fighter.invulnerabilityTimer = 0.20; // 0.20s i-frames for AI opponents
     }
@@ -3779,6 +4425,30 @@ export class ThreeArenaEngine {
         });
       }
 
+      // Check physical projectile collision with solid tree trunks (Wood Cover)
+      if (!hit && this.floraSystem) {
+        for (const tree of this.floraSystem.trees) {
+          const dTree = Math.hypot(tree.x - p.x, tree.z - p.z);
+          if (dTree < tree.trunkRadius && p.y < tree.trunkHeight) {
+            hit = true;
+            try {
+              sound.playHit();
+            } catch {}
+            this.damageFloaters.push({
+              id: `tree-cover-${Date.now()}-${Math.random()}`,
+              text: '🛡️ WOOD COVER',
+              x: tree.x,
+              y: Math.max(1.5, p.y),
+              z: tree.z,
+              color: '#86efac',
+              isCrit: false,
+              opacity: 0.9,
+            });
+            break;
+          }
+        }
+      }
+
       // Remove expired or hit projectiles
       if (hit || p.lifetime <= 0) {
         if (mesh) this.scene.remove(mesh);
@@ -3894,13 +4564,32 @@ export class ThreeArenaEngine {
   }
 
   public destroy() {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
     this.isRunning = false;
-    if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
-    window.removeEventListener('resize', this.handleResize);
-    this.cleanupCombatEntities();
-    if (this.renderer && this.renderer.domElement.parentElement) {
-      this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+    this.isPaused = true;
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = 0;
     }
-    this.renderer?.dispose();
+    try {
+      multiplayerManager.stopCombatSync();
+    } catch {}
+    try {
+      this.cleanupCombatEntities();
+    } catch {}
+    try {
+      if (this.floraSystem) {
+        this.scene.remove(this.floraSystem.floraGroup);
+        this.floraSystem.dispose();
+        this.floraSystem = null;
+      }
+    } catch {}
+    try {
+      if (this.renderer && this.renderer.domElement && this.renderer.domElement.parentElement) {
+        this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+      }
+      this.renderer?.dispose();
+    } catch {}
   }
 }

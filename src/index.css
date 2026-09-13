@@ -4,8 +4,8 @@
   html, body {
     font-family: 'Fredoka', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
-    background-color: #0D281E;
-    color: #FFFFFF;
+    background-color: #E8F0EA;
+    color: #0E3323;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
     overscroll-behavior-y: contain;
