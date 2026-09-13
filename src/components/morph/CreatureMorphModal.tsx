@@ -31,7 +31,8 @@ import {
   Info,
   ArrowRight,
   Box,
-  Activity
+  Activity,
+  Key
 } from 'lucide-react';
 import * as THREE from 'three';
 import { BattleCreature, CreatureElement } from '../../types/creature';
@@ -45,7 +46,7 @@ import confetti from 'canvas-confetti';
 import { ExplorationDiscoveryContext } from '../../types/exploration';
 import { Compass, ShieldCheck } from 'lucide-react';
 import { applyExplorationPowerToCreature } from '../../utils/explorationPowerScaling';
-import { recognizeAndGenerateCreature } from '../../utils/geminiVisionRecognizer';
+import { recognizeAndGenerateCreature, getUserGeminiApiKey, saveUserGeminiApiKey } from '../../utils/geminiVisionRecognizer';
 
 interface CreatureMorphModalProps {
   onCreatureReady: (creature: BattleCreature) => void;
@@ -65,6 +66,11 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
   const [shutterFlash, setShutterFlash] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [promptHint, setPromptHint] = useState('');
+  
+  // Gemini API Key management
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [geminiKeyInput, setGeminiKeyInput] = useState(() => getUserGeminiApiKey());
+  const [keySavedFeedback, setKeySavedFeedback] = useState(false);
   
   // AI Object Analysis 2.0 staged states
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -404,6 +410,23 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
         
         {/* Pinned Top Bar / Header */}
         <div className="shrink-0 p-3.5 sm:p-5 border-b border-[#184635]/80 bg-[#071610]/95 relative z-10">
+          {/* Key Settings Button */}
+          <div className="absolute top-3 right-12 sm:top-4 sm:right-14 z-10">
+            <button
+              type="button"
+              onClick={() => setShowKeyModal(true)}
+              title="Google Gemini AI Key Settings"
+              className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                getUserGeminiApiKey()
+                  ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300 shadow-xs'
+                  : 'bg-[#0E281E] border-[#1C4D3A] text-[#6DAA8E] hover:text-white'
+              }`}
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">{getUserGeminiApiKey() ? 'AI Key Active' : 'API Key'}</span>
+            </button>
+          </div>
+
           {onClose && (
             <button
               onClick={onClose}
@@ -456,6 +479,87 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
             </p>
           </div>
         </div>
+
+        {/* Gemini API Key Configuration Modal Overlay */}
+        {showKeyModal && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+            <div className="w-full max-w-md p-5 rounded-2xl bg-[#091B14] border border-[#2BE29E]/40 shadow-2xl space-y-4 text-left">
+              <div className="flex items-center justify-between border-b border-[#143B2C] pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-emerald-600 text-white shadow-xs">
+                    <Key className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">Google Gemini AI Key</h3>
+                    <p className="text-[10px] text-[#6DAA8E]">For direct multimodal vision object recognition</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowKeyModal(false)}
+                  className="p-1 rounded-lg bg-[#071610] text-[#6DAA8E] hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase font-bold text-[#2BE29E] block">
+                  Paste Your Google AI Studio Key (Starts with AIzaSy...)
+                </label>
+                <input
+                  type="password"
+                  value={geminiKeyInput}
+                  onChange={(e) => setGeminiKeyInput(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full px-3 py-2 rounded-xl bg-[#071610] border border-[#1C4D3A] focus:border-[#2BE29E] text-xs font-mono text-white focus:outline-none"
+                />
+                <p className="text-[10px] text-[#A1D2BC] leading-relaxed">
+                  Get a free permanent API key at <strong className="text-[#2BE29E]">aistudio.google.com</strong>.
+                  If left empty, Matter-Born automatically uses on-device Computer Vision contour & shape analysis.
+                </p>
+              </div>
+
+              {keySavedFeedback && (
+                <div className="p-2 rounded-lg bg-emerald-950 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-emerald-400" />
+                  <span>API Key successfully saved!</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                {geminiKeyInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveUserGeminiApiKey('');
+                      setGeminiKeyInput('');
+                      setKeySavedFeedback(true);
+                      setTimeout(() => setKeySavedFeedback(false), 2000);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-[#071610] hover:bg-rose-950/40 border border-rose-900/40 text-rose-400 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Clear Key
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveUserGeminiApiKey(geminiKeyInput);
+                    setKeySavedFeedback(true);
+                    setTimeout(() => {
+                      setKeySavedFeedback(false);
+                      setShowKeyModal(false);
+                    }, 1000);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-black shadow-md transition-all cursor-pointer"
+                >
+                  Save Key
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Scrollable Content Body */}
         <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 space-y-4 overscroll-contain">
@@ -803,6 +907,81 @@ export const CreatureMorphModal: React.FC<CreatureMorphModalProps> = ({
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Physical 3D Silhouette & Shape Archetype */}
+                <div className="p-3.5 rounded-xl bg-[#091B14] border border-[#2BE29E]/40 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">
+                        {stagedCreature.visualParams?.shapeArchetype === 'cylinder' ? '🧴' :
+                         stagedCreature.visualParams?.shapeArchetype === 'sheet_slab' ? '📱' :
+                         stagedCreature.visualParams?.shapeArchetype === 'sphere_round' ? '⚽' : '📦'}
+                      </span>
+                      <div>
+                        <div className="text-[10px] uppercase font-black tracking-wider text-[#2BE29E] flex items-center gap-1.5">
+                          <span>Physical 3D Silhouette Archetype</span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
+                            Auto-Detected
+                          </span>
+                        </div>
+                        <div className="text-xs font-black text-white">
+                          {stagedCreature.visualParams?.shapeArchetype === 'cylinder' ? 'Cylindrical Bottle / Canister' :
+                           stagedCreature.visualParams?.shapeArchetype === 'sheet_slab' ? 'Flat Tech Slab / Screen' :
+                           stagedCreature.visualParams?.shapeArchetype === 'sphere_round' ? 'Spherical Orb / Round Sphere' :
+                           'Cuboid Armor Box / Container'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5" title="Detected Photo Colors (Primary & Secondary)">
+                      <div className="w-5 h-5 rounded-full border-2 border-white/30 shadow-xs" style={{ backgroundColor: stagedCreature.visualParams?.primaryColor }} />
+                      <div className="w-5 h-5 rounded-full border-2 border-white/30 shadow-xs" style={{ backgroundColor: stagedCreature.visualParams?.secondaryColor }} />
+                    </div>
+                  </div>
+
+                  {/* Shape Switcher: lets user fine-tune or pick the exact 3D robot body shape */}
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-[#6DAA8E] block mb-1">
+                      Choose / Override 3D Robot Silhouette:
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {[
+                        { id: 'cylinder', icon: '🧴', label: 'Cylinder', desc: 'Bottle / Flask' },
+                        { id: 'sheet_slab', icon: '📱', label: 'Flat Slab', desc: 'Screen / Laptop' },
+                        { id: 'sphere_round', icon: '⚽', label: 'Round Orb', desc: 'Sphere / Fruit' },
+                        { id: 'cuboid_box', icon: '📦', label: 'Cuboid Box', desc: 'Box / Crate' },
+                      ].map((shape) => {
+                        const isSelected = (stagedCreature.visualParams?.shapeArchetype || 'cylinder') === shape.id;
+                        return (
+                          <button
+                            key={shape.id}
+                            type="button"
+                            onClick={() => {
+                              const updated = {
+                                ...stagedCreature,
+                                visualParams: {
+                                  ...stagedCreature.visualParams,
+                                  shapeArchetype: shape.id as any,
+                                },
+                              };
+                              setStagedCreature(updated);
+                            }}
+                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#143B2C] border-[#2BE29E] text-white shadow-xs scale-[1.02]'
+                                : 'bg-[#071610] border-[#143B2C] text-[#6DAA8E] hover:border-[#2BE29E]/50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm">{shape.icon}</span>
+                              <span className="text-[11px] font-bold text-white">{shape.label}</span>
+                            </div>
+                            <div className="text-[9px] text-[#6DAA8E] truncate">{shape.desc}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 

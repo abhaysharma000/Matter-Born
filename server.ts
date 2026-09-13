@@ -702,6 +702,7 @@ Output ONLY valid JSON matching this schema:
     "primaryColor": string (hex),
     "secondaryColor": string (hex),
     "glowColor": string (hex),
+    "shapeArchetype": "cylinder" | "sheet_slab" | "sphere_round" | "cuboid_box",
     "objectArchetype": string,
     "bodyShape": "mech",
     "scale": number,
@@ -1704,6 +1705,36 @@ function ensureStructuredObjectDna(
   return creature;
 }
 
+// Detect shape archetype on the server
+function detectServerObjectShapeArchetype(
+  objectName: string = '',
+  shapeHint: string = ''
+): 'cylinder' | 'sheet_slab' | 'sphere_round' | 'cuboid_box' {
+  const text = `${objectName} ${shapeHint}`.toLowerCase();
+  if (
+    /bottle|flask|canister|thermos|cylinder|cylindrical|can\b|tumbler|mug|cup\b|tube|pipe|beaker|container|dispenser|shampoo|spray|deodorant|candle|vase|pen\b|pencil|marker/i.test(
+      text
+    )
+  ) {
+    return 'cylinder';
+  }
+  if (
+    /sheet|slab|laptop|notebook|macbook|chromebook|tablet|ipad|phone|smartphone|screen|display|monitor|flatscreen|book|card|paper|board|clipboard|kindle|switch|deck/i.test(
+      text
+    )
+  ) {
+    return 'sheet_slab';
+  }
+  if (
+    /sphere|spherical|round|ball|orb\b|globe|apple|orange|fruit|tomato|lemon|onion|melon|baseball|basketball|football|soccer|tennis|golf|marble|bulb|pearl|dome|circle|circular/i.test(
+      text
+    )
+  ) {
+    return 'sphere_round';
+  }
+  return 'cuboid_box';
+}
+
 // Procedural generator that dynamically crafts a custom creature tailored to the photo's colors and hint
 function generateProceduralCreature(hint: string, clientAnalyzed?: any, distanceFromStartMeters: number = 0) {
   const h = (hint || "").toLowerCase();
@@ -2417,20 +2448,43 @@ function generateProceduralCreature(hint: string, clientAnalyzed?: any, distance
     return ensureStructuredObjectDna(rawBuilding, clientAnalyzed, hint);
   }
 
-  // General dynamic creature matching the analyzed photo's exact colors!
-  const detectedObject = hint || (isWarm ? "Warm Ambient Artifact" : "High-Frequency Physical Object");
+  // General dynamic creature matching the analyzed photo's exact colors and physical shape silhouette!
+  const assignedShape: 'cylinder' | 'sheet_slab' | 'sphere_round' | 'cuboid_box' =
+    clientAnalyzed?.shapeArchetype ||
+    detectServerObjectShapeArchetype(hint, clientAnalyzed?.detectedShapeLabel);
+
+  const detectedObject =
+    hint ||
+    clientAnalyzed?.suggestedOriginalObject ||
+    clientAnalyzed?.detectedShapeLabel ||
+    (assignedShape === 'cylinder'
+      ? 'Cylindrical Bottle / Canister'
+      : assignedShape === 'sheet_slab'
+      ? 'Flat Tech Slab / Screen'
+      : assignedShape === 'sphere_round'
+      ? 'Spherical Orb / Round Sphere'
+      : isWarm
+      ? 'Warm Structural Container'
+      : 'High-Frequency Physical Object');
+
   const el = isWarm ? (primary.includes("FF") ? "fire" : "rock") : "cyber";
   const isDec = !isWarm;
 
+  const robotName =
+    clientAnalyzed?.suggestedRobotName ||
+    (isDec
+      ? `Megatronix ${detectedObject.split(" ")[0] || "Cyber"}`
+      : `Ironhide ${detectedObject.split(" ")[0] || "Titan"}`);
+
   const baseCreature = {
-    name: isDec ? `Megatronix ${detectedObject.split(" ")[0] || "Cyber"}` : `Ironhide ${detectedObject.split(" ")[0] || "Titan"}`,
+    name: robotName,
     faction: isDec ? "Decepticon" : "Autobot",
-    robotClass: "Warrior",
+    robotClass: assignedShape === 'sheet_slab' ? 'Scout' : assignedShape === 'cylinder' ? 'Seeker' : 'Warrior',
     originalObject: detectedObject,
-    objectFeature: `Synthesized from real-world colors (${primary} & ${secondary}) and Cybertronian alloy`,
+    objectFeature: `Synthesized from real-world shape (${assignedShape}) and colors (${primary} & ${secondary})`,
     element: el,
     rarity: "Epic",
-    lore: `Directly forged from the visual signature and matter of the player's real-world ${detectedObject}. It wields its physical structure as a heavy weapon mech.`,
+    lore: `Directly forged from the visual signature and matter of the player's real-world ${detectedObject}. Its chassis mirrors the physical silhouette and Allspark energon of the photographed item.`,
     stats: { hp: 550, attack: 95, defense: 72, speed: 12 },
     materialPhysics: {
       materialName: "Composite Hybrid Alloy & Polymer",
@@ -2455,17 +2509,20 @@ function generateProceduralCreature(hint: string, clientAnalyzed?: any, distance
       primaryColor: primary,
       secondaryColor: secondary,
       glowColor: glow,
-      objectArchetype: "generic_item",
+      shapeArchetype: assignedShape,
+      objectArchetype: assignedShape === 'cylinder' ? 'bottle_can' : assignedShape === 'sheet_slab' ? 'phone_tech' : 'generic_item',
       bodyShape: "mech",
       scale: 1.1,
       geometryHints: inferGeometryHints(detectedObject),
       primaryShape: inferShapeFromObject(detectedObject),
       hornsOrCrest: true,
-      wings: false,
-      tail: true,
+      wings: assignedShape === 'cylinder',
+      tail: false,
       spikes: true,
       armorPlates: true,
-      floatingOrbs: true,
+      floatingOrbs: assignedShape === 'sphere_round',
+      hasScreen: assignedShape === 'sheet_slab',
+      hasCapOrLid: assignedShape === 'cylinder',
       auraParticleType: isWarm ? "fire" : "cyber_cubes",
       metallicFactor: 0.65,
       roughnessFactor: 0.35,
@@ -2723,13 +2780,20 @@ Examine this photo captured by the player. Perform deep, authentic object recogn
    - Distinct material properties yield logical combat advantages and vulnerabilities in 'propertyConsequences'.
 ${promptHint ? `Player provided note: "${promptHint}".` : ""}
 ${colorHint}
+${clientAnalyzed?.shapeArchetype ? `Contour silhouette analysis detected shape archetype: "${clientAnalyzed.shapeArchetype}" (${clientAnalyzed.detectedShapeLabel}). You MUST set visualParams.shapeArchetype to "${clientAnalyzed.shapeArchetype}".` : ""}
 Player current exploration distance from starting position: ${currentDistance} meters.
 Output strictly valid JSON matching the schema including the complete objectDna structure.`;
 
     parts.push({ text: textPrompt });
 
-    // Cascading models: prioritize gemini-3.8-flash for highest multimodal vision accuracy
-    const candidateModels = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-flash-latest"];
+    // Cascading models: prioritize fast reliable multimodal vision models
+    const candidateModels = [
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-flash-latest"
+    ];
     let lastError: any = null;
     let creatureData: any = null;
 
@@ -2753,6 +2817,13 @@ Output strictly valid JSON matching the schema including the complete objectDna 
         }
 
         if (creatureData && creatureData.name) {
+          if (!creatureData.visualParams) creatureData.visualParams = {};
+          // Enforce shapeArchetype matching the physical object
+          creatureData.visualParams.shapeArchetype =
+            creatureData.visualParams.shapeArchetype ||
+            clientAnalyzed?.shapeArchetype ||
+            detectServerObjectShapeArchetype(creatureData.originalObject || creatureData.name, creatureData.objectDna?.visualIdentity?.shape);
+
           // If Gemini did not provide primaryColor or left it generic, ensure it aligns with detected photo colors
           if (clientAnalyzed?.primaryHex && (!creatureData.visualParams?.primaryColor || creatureData.visualParams.primaryColor === "#FF4500")) {
             creatureData.visualParams.primaryColor = clientAnalyzed.primaryHex;

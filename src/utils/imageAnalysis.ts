@@ -29,6 +29,12 @@ export interface ExtractedImageFeatures {
   edgeDensity: number; // 0 to 1
   colorEntropy: number; // 0 to 1
   complexity: ObjectComplexityAnalysis;
+  shapeArchetype: 'cylinder' | 'sheet_slab' | 'sphere_round' | 'cuboid_box';
+  detectedShapeLabel: string;
+  foregroundAspectRatio: number;
+  circularity: number;
+  suggestedRobotName: string;
+  suggestedOriginalObject: string;
 }
 
 // Heuristic keyword matcher for real-world physical object scale and structural complexity
@@ -257,6 +263,12 @@ export async function analyzeImageFileOrBase64(
       edgeDensity: 0.45,
       colorEntropy: 0.5,
       complexity: fallbackComplexity,
+      shapeArchetype: 'cylinder',
+      detectedShapeLabel: 'Cylindrical Bottle / Canister',
+      foregroundAspectRatio: 0.7,
+      circularity: 0.6,
+      suggestedRobotName: 'Hydro-Vortex Vanguard',
+      suggestedOriginalObject: 'Cylindrical Bottle',
     };
 
     if (typeof window === 'undefined') {
@@ -272,7 +284,8 @@ export async function analyzeImageFileOrBase64(
         const ctx = canvas.getContext('2d');
         if (!ctx) return resolve(fallback);
 
-        const sampleSize = 48; // Increased resolution for high-frequency edge analysis
+        // 64x64 resolution provides high accuracy for contour and color separation
+        const sampleSize = 64;
         canvas.width = sampleSize;
         canvas.height = sampleSize;
 
@@ -280,100 +293,266 @@ export async function analyzeImageFileOrBase64(
         const imgData = ctx.getImageData(0, 0, sampleSize, sampleSize);
         const data = imgData.data;
 
-        // Color quantization: build histogram
-        const colorCounts: Record<string, { r: number; g: number; b: number; count: number }> = {};
-        let totalR = 0;
-        let totalG = 0;
-        let totalB = 0;
-        let totalPixels = 0;
-
-        // Grayscale map for Sobel edge detection
-        const grayMap = new Float32Array(sampleSize * sampleSize);
-
-        for (let i = 0; i < data.length; i += 4) {
-          const pixelIdx = i / 4;
-          const pxX = pixelIdx % sampleSize;
-          const pxY = Math.floor(pixelIdx / sampleSize);
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const a = data[i + 3];
-
-          // Store grayscale value (0.0 to 1.0)
-          grayMap[pixelIdx] = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-
-          // Skip nearly transparent pixels
-          if (a < 80) continue;
-
-          // Foreground center-weighting: objects are framed in the central 60% of the image
-          const normX = (pxX - sampleSize / 2) / (sampleSize / 2);
-          const normY = (pxY - sampleSize / 2) / (sampleSize / 2);
-          const distFromCenter = Math.hypot(normX, normY);
-          const weight = Math.max(0.25, 1.25 - distFromCenter * 0.95);
-
-          totalR += r * weight;
-          totalG += g * weight;
-          totalB += b * weight;
-          totalPixels += weight;
-
-          // Quantize to reduce bins
-          const qr = Math.round(r / 24) * 24;
-          const qg = Math.round(g / 24) * 24;
-          const qb = Math.round(b / 24) * 24;
-          const key = `${qr},${qg},${qb}`;
-
-          if (!colorCounts[key]) {
-            colorCounts[key] = { r: qr, g: qg, b: qb, count: 0 };
+        // Step 1: Background Estimation (Sample 4-pixel border around perimeter)
+        let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
+        const borderThickness = 4;
+        for (let y = 0; y < sampleSize; y++) {
+          for (let x = 0; x < sampleSize; x++) {
+            const isBorder =
+              x < borderThickness ||
+              x >= sampleSize - borderThickness ||
+              y < borderThickness ||
+              y >= sampleSize - borderThickness;
+            if (isBorder) {
+              const i = (y * sampleSize + x) * 4;
+              bgR += data[i];
+              bgG += data[i + 1];
+              bgB += data[i + 2];
+              bgCount++;
+            }
           }
-          colorCounts[key].count += weight;
+        }
+        const avgBgR = bgCount > 0 ? bgR / bgCount : 200;
+        const avgBgG = bgCount > 0 ? bgG / bgCount : 200;
+        const avgBgB = bgCount > 0 ? bgB / bgCount : 200;
+
+        // Step 2: Grayscale & Sobel Edge Gradient Map
+        const grayMap = new Float32Array(sampleSize * sampleSize);
+        for (let i = 0; i < data.length; i += 4) {
+          const pIdx = i / 4;
+          grayMap[pIdx] = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255.0;
         }
 
-        if (totalPixels === 0) return resolve(fallback);
-
-        // Compute Sobel edge density (detect high-frequency mechanical detail & complexity)
+        const edgeMap = new Float32Array(sampleSize * sampleSize);
         let edgeSum = 0;
         let edgeCount = 0;
         for (let y = 1; y < sampleSize - 1; y++) {
           for (let x = 1; x < sampleSize - 1; x++) {
             const idx = y * sampleSize + x;
-            // Center weight edge focus so background borders don't distort object edge score
-            const normX = (x - sampleSize / 2) / (sampleSize / 2);
-            const normY = (y - sampleSize / 2) / (sampleSize / 2);
-            const edgeWeight = Math.max(0.3, 1.15 - Math.hypot(normX, normY) * 0.85);
-
-            // Horizontal gradient
             const gx =
               -grayMap[idx - sampleSize - 1] + grayMap[idx - sampleSize + 1] +
               -2 * grayMap[idx - 1] + 2 * grayMap[idx + 1] +
               -grayMap[idx + sampleSize - 1] + grayMap[idx + sampleSize + 1];
-
-            // Vertical gradient
             const gy =
               -grayMap[idx - sampleSize - 1] - 2 * grayMap[idx - sampleSize] - grayMap[idx - sampleSize + 1] +
               grayMap[idx + sampleSize - 1] + 2 * grayMap[idx + sampleSize] + grayMap[idx + sampleSize + 1];
-
-            const magnitude = Math.sqrt(gx * gx + gy * gy);
-            if (magnitude > 0.16) {
-              edgeSum += magnitude * edgeWeight;
+            const mag = Math.sqrt(gx * gx + gy * gy);
+            edgeMap[idx] = mag;
+            if (mag > 0.14) {
+              edgeSum += mag;
             }
-            edgeCount += edgeWeight;
+            edgeCount++;
           }
         }
-        const edgeDensity = Math.min(1.0, (edgeSum / (edgeCount || 1)) * 3.4);
+        const edgeDensity = Math.min(1.0, (edgeSum / (edgeCount || 1)) * 3.6);
 
-        // Color entropy: number of distinct color clusters
-        const distinctColorCount = Object.keys(colorCounts).length;
-        const colorEntropy = Math.min(1.0, distinctColorCount / 35.0);
+        // Step 3: Foreground Object Segmentation & Bounding Box
+        let minX = sampleSize, maxX = 0, minY = sampleSize, maxY = 0;
+        let fgPixelCount = 0;
+        let sumX = 0, sumY = 0;
+        const isForeground = new Uint8Array(sampleSize * sampleSize);
 
-        // Sort by frequency
+        for (let y = 2; y < sampleSize - 2; y++) {
+          for (let x = 2; x < sampleSize - 2; x++) {
+            const pIdx = y * sampleSize + x;
+            const i = pIdx * 4;
+            const a = data[i + 3];
+            if (a < 80) continue;
+
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Distance from estimated background
+            const dR = r - avgBgR;
+            const dG = g - avgBgG;
+            const dB = b - avgBgB;
+            const colorDist = Math.sqrt(dR * dR + dG * dG + dB * dB);
+
+            // Center bias for foreground framing
+            const normX = (x - sampleSize / 2) / (sampleSize / 2);
+            const normY = (y - sampleSize / 2) / (sampleSize / 2);
+            const centerDist = Math.hypot(normX, normY);
+
+            const isFg = (colorDist > 32 || edgeMap[pIdx] > 0.18) && centerDist < 0.92;
+            if (isFg) {
+              isForeground[pIdx] = 1;
+              fgPixelCount++;
+              sumX += x;
+              sumY += y;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+
+        // Fallback to central region if segmentation was overly aggressive
+        if (fgPixelCount < 40) {
+          minX = Math.floor(sampleSize * 0.2);
+          maxX = Math.ceil(sampleSize * 0.8);
+          minY = Math.floor(sampleSize * 0.15);
+          maxY = Math.ceil(sampleSize * 0.85);
+          for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
+              isForeground[y * sampleSize + x] = 1;
+            }
+          }
+          fgPixelCount = (maxX - minX + 1) * (maxY - minY + 1);
+          sumX = ((minX + maxX) / 2) * fgPixelCount;
+          sumY = ((minY + maxY) / 2) * fgPixelCount;
+        }
+
+        const fgWidth = Math.max(1, maxX - minX + 1);
+        const fgHeight = Math.max(1, maxY - minY + 1);
+        const foregroundAspectRatio = fgWidth / fgHeight;
+        const centerX = sumX / fgPixelCount;
+        const centerY = sumY / fgPixelCount;
+
+        // Step 4: Measure Circularity / Radial Symmetry
+        let radialDistances: number[] = [];
+        const numRays = 16;
+        for (let aIdx = 0; aIdx < numRays; aIdx++) {
+          const angle = (aIdx / numRays) * Math.PI * 2;
+          const cosA = Math.cos(angle);
+          const sinA = Math.sin(angle);
+          let rayDist = 0;
+          for (let step = 1; step < sampleSize / 2; step++) {
+            const rx = Math.round(centerX + cosA * step);
+            const ry = Math.round(centerY + sinA * step);
+            if (rx < 0 || rx >= sampleSize || ry < 0 || ry >= sampleSize) break;
+            if (isForeground[ry * sampleSize + rx] === 1) {
+              rayDist = step;
+            }
+          }
+          if (rayDist > 0) {
+            radialDistances.push(rayDist);
+          }
+        }
+
+        let circularityScore = 0.5;
+        if (radialDistances.length >= 8) {
+          const meanR = radialDistances.reduce((a, b) => a + b, 0) / radialDistances.length;
+          const varR =
+            radialDistances.reduce((acc, d) => acc + Math.pow(d - meanR, 2), 0) /
+            radialDistances.length;
+          const stdR = Math.sqrt(varR);
+          const relStd = stdR / (meanR || 1);
+          circularityScore = Math.max(0, Math.min(1.0, 1.0 - relStd * 2.5));
+        }
+
+        // Step 5: Classify Shape Archetype
+        let shapeArchetype: 'cylinder' | 'sheet_slab' | 'sphere_round' | 'cuboid_box';
+        let detectedShapeLabel: string;
+        let suggestedOriginalObject: string;
+
+        // Prioritize explicit text hint if provided
+        const hintLower = hintText.toLowerCase();
+        if (
+          /bottle|flask|canister|thermos|cylinder|can\b|tumbler|mug|cup|tube|shampoo|spray|deodorant|candle|pen|pencil|marker/i.test(
+            hintLower
+          )
+        ) {
+          shapeArchetype = 'cylinder';
+          detectedShapeLabel = 'Cylindrical Bottle / Canister';
+          suggestedOriginalObject = 'Cylindrical Bottle / Vessel';
+        } else if (
+          /sheet|slab|laptop|notebook|macbook|tablet|ipad|phone|smartphone|screen|display|monitor|book|card|paper/i.test(
+            hintLower
+          )
+        ) {
+          shapeArchetype = 'sheet_slab';
+          detectedShapeLabel = 'Flat Tech Slab / Screen';
+          suggestedOriginalObject = 'Flat Screen Slate / Tech Device';
+        } else if (
+          /sphere|round|ball|orb|globe|apple|orange|fruit|tomato|lemon|melon|bulb|circle/i.test(
+            hintLower
+          )
+        ) {
+          shapeArchetype = 'sphere_round';
+          detectedShapeLabel = 'Spherical Orb / Round Sphere';
+          suggestedOriginalObject = 'Spherical Orb / Round Object';
+        } else if (/box|crate|carton|package|cube|block/i.test(hintLower)) {
+          shapeArchetype = 'cuboid_box';
+          detectedShapeLabel = 'Cuboid Armor Box / Container';
+          suggestedOriginalObject = 'Corrugated Crate / Structural Box';
+        } else {
+          // Authentic Computer Vision Silhouette Classification from foreground bounds
+          if (foregroundAspectRatio <= 0.78) {
+            // Taller than wide: Bottle, Can, Flask, Mug, Spray Can
+            shapeArchetype = 'cylinder';
+            detectedShapeLabel = 'Cylindrical Bottle / Canister';
+            suggestedOriginalObject = 'Cylindrical Bottle / Fluid Vessel';
+          } else if (foregroundAspectRatio >= 1.28) {
+            // Wider than tall: Screen, Laptop, Tablet, Keyboard, Slate
+            shapeArchetype = 'sheet_slab';
+            detectedShapeLabel = 'Flat Tech Slab / Screen';
+            suggestedOriginalObject = 'Flat Screen Slate / Tech Device';
+          } else if (circularityScore >= 0.72) {
+            // Near 1:1 aspect ratio with high circular symmetry: Ball, Apple, Fruit, Orb
+            shapeArchetype = 'sphere_round';
+            detectedShapeLabel = 'Spherical Orb / Round Sphere';
+            suggestedOriginalObject = 'Spherical Orb / Round Object';
+          } else {
+            // Angular/squarish: Box, Crate, Cube
+            shapeArchetype = 'cuboid_box';
+            detectedShapeLabel = 'Cuboid Armor Box / Container';
+            suggestedOriginalObject = 'Corrugated Crate / Structural Box';
+          }
+        }
+
+        // Step 6: Pure Foreground Color Extraction
+        const colorCounts: Record<string, { r: number; g: number; b: number; count: number }> = {};
+        let totalR = 0, totalG = 0, totalB = 0, totalFg = 0;
+
+        for (let y = 0; y < sampleSize; y++) {
+          for (let x = 0; x < sampleSize; x++) {
+            const pIdx = y * sampleSize + x;
+            if (isForeground[pIdx] !== 1) continue;
+
+            const i = pIdx * 4;
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Weight center pixels higher than perimeter
+            const normX = (x - centerX) / (fgWidth / 2 || 1);
+            const normY = (y - centerY) / (fgHeight / 2 || 1);
+            const dist = Math.hypot(normX, normY);
+            const weight = Math.max(0.4, 1.4 - dist * 0.8);
+
+            totalR += r * weight;
+            totalG += g * weight;
+            totalB += b * weight;
+            totalFg += weight;
+
+            // Quantize to 24-step color bins
+            const qr = Math.round(r / 24) * 24;
+            const qg = Math.round(g / 24) * 24;
+            const qb = Math.round(b / 24) * 24;
+            const key = `${qr},${qg},${qb}`;
+
+            if (!colorCounts[key]) {
+              colorCounts[key] = { r: qr, g: qg, b: qb, count: 0 };
+            }
+            colorCounts[key].count += weight;
+          }
+        }
+
+        if (totalFg === 0) return resolve(fallback);
+
+        // Sort colors favoring vibrant hues over washed-out neutral greys
         const sortedColors = Object.values(colorCounts).sort((a, b) => {
-          const satA = Math.max(a.r, a.g, a.b) - Math.min(a.r, a.g, a.b);
-          const satB = Math.max(b.r, b.g, b.b) - Math.min(b.r, b.g, b.b);
-          return (b.count * (1 + satB / 128)) - (a.count * (1 + satA / 128));
+          const satA = (Math.max(a.r, a.g, a.b) - Math.min(a.r, a.g, a.b)) / 255;
+          const satB = (Math.max(b.r, b.g, b.b) - Math.min(b.r, b.g, b.b)) / 255;
+          const scoreA = a.count * (1 + satA * 1.5);
+          const scoreB = b.count * (1 + satB * 1.5);
+          return scoreB - scoreA;
         });
 
         const dominant = sortedColors[0] || { r: 0, g: 229, b: 255 };
-        const secondary = sortedColors[1] || sortedColors[0] || { r: 124, g: 77, b: 255 };
+        const secondary = sortedColors[1] || { r: 124, g: 77, b: 255 };
 
         const toHex = (r: number, g: number, b: number) => {
           const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
@@ -383,27 +562,57 @@ export async function analyzeImageFileOrBase64(
         const primaryHex = toHex(dominant.r, dominant.g, dominant.b);
         const secondaryHex = toHex(secondary.r, secondary.g, secondary.b);
 
-        // Create an energy glow color
         const isWarm = dominant.r > dominant.b && dominant.r > dominant.g * 0.8;
-        let glowHex: string;
+        let glowHex = '#00E5FF';
         if (dominant.g > dominant.r && dominant.g > dominant.b) {
-          glowHex = '#00FF66'; // nature/green
+          glowHex = '#00FF66'; // nature green
         } else if (dominant.b > dominant.r && dominant.b > dominant.g) {
-          glowHex = '#00E5FF'; // cyan/ice/cyber
+          glowHex = '#00E5FF'; // cyan
         } else if (isWarm) {
-          glowHex = dominant.r > 200 && dominant.g > 160 ? '#FFD600' : '#FF3D00'; // fire/electric
+          glowHex = dominant.r > 200 && dominant.g > 160 ? '#FFD600' : '#FF3D00'; // fire/amber
         } else {
-          glowHex = '#E040FB'; // void/magenta
+          glowHex = '#E040FB'; // void
         }
 
-        const avgBrightness = (totalR + totalG + totalB) / (totalPixels * 3);
+        const avgBrightness = (totalR + totalG + totalB) / (totalFg * 3);
         const maxC = Math.max(dominant.r, dominant.g, dominant.b) / 255;
         const minC = Math.min(dominant.r, dominant.g, dominant.b) / 255;
         const saturation = maxC === 0 ? 0 : (maxC - minC) / maxC;
-        const aspectRatio = img.naturalWidth / (img.naturalHeight || 1);
+        const colorEntropy = Math.min(1.0, Object.keys(colorCounts).length / 30.0);
 
-        // Evaluate comprehensive physical scale and structural complexity
-        const complexity = evaluateObjectComplexityAndScale(hintText, edgeDensity, colorEntropy);
+        // Step 7: Procedural Name tailored to shape and extracted colors
+        let suggestedRobotName = 'Cybertron Sentinel';
+        if (shapeArchetype === 'cylinder') {
+          suggestedRobotName = isWarm
+            ? 'Pyro-Canister Vanguard'
+            : dominant.b > dominant.r
+            ? 'Hydro-Flask Seeker'
+            : dominant.g > dominant.r
+            ? 'Verdant Cylinder Titan'
+            : 'Vortex-Canister Autobot';
+        } else if (shapeArchetype === 'sheet_slab') {
+          suggestedRobotName = dominant.b > dominant.r
+            ? 'OLED Data-Plate Scout'
+            : isWarm
+            ? 'Ignis-Tablet Striker'
+            : 'Tactical Matrix Infiltrator';
+        } else if (shapeArchetype === 'sphere_round') {
+          suggestedRobotName = isWarm
+            ? 'Solar-Orb Singularity Titan'
+            : dominant.g > dominant.r
+            ? 'Verdant Core Golem'
+            : 'Orbital Sphere Arbiter';
+        } else {
+          suggestedRobotName = isWarm
+            ? 'Bastion Aegis Dreadnought'
+            : 'Corrugated Armor Titan';
+        }
+
+        const complexity = evaluateObjectComplexityAndScale(
+          hintText || suggestedOriginalObject,
+          edgeDensity,
+          colorEntropy
+        );
 
         resolve({
           primaryHex,
@@ -412,10 +621,16 @@ export async function analyzeImageFileOrBase64(
           isWarm,
           brightness: Math.round(avgBrightness),
           saturation,
-          aspectRatio,
+          aspectRatio: img.naturalWidth / (img.naturalHeight || 1),
           edgeDensity,
           colorEntropy,
           complexity,
+          shapeArchetype,
+          detectedShapeLabel,
+          foregroundAspectRatio,
+          circularity: circularityScore,
+          suggestedRobotName,
+          suggestedOriginalObject,
         });
       } catch (e) {
         console.warn('Image analysis exception, using fallback colors:', e);

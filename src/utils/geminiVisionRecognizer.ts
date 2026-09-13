@@ -5,10 +5,32 @@ import { deriveCreatureStatsFromComplexityAndDistance } from './imageAnalysis';
 import { OBJECT_PRESETS } from '../data/creaturePresets';
 
 // Gemini API Key configured for real-world object recognition
+export function getUserGeminiApiKey(): string {
+  if (typeof window !== 'undefined') {
+    const userKey = localStorage.getItem('USER_GEMINI_KEY');
+    if (userKey && userKey.trim().length > 10) return userKey.trim();
+  }
+  return (
+    (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) ||
+    ''
+  );
+}
+
+export function saveUserGeminiApiKey(key: string): void {
+  if (typeof window !== 'undefined') {
+    if (!key || key.trim() === '') {
+      localStorage.removeItem('USER_GEMINI_KEY');
+    } else {
+      localStorage.setItem('USER_GEMINI_KEY', key.trim());
+    }
+  }
+}
+
 export const DEFAULT_GEMINI_KEY =
   (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) ||
-  'AQ.Ab8RN6IT4Lmf0mKQ-cP4onLcUcDq-pwa9574rEZjwyyF7heYCA';
+  '';
 
 const CREATURE_SYSTEM_PROMPT = `You are the Master Cybertron Bio-Morph Engine for Matter-Born (Theme: Real World x AI x Transformers).
 
@@ -135,7 +157,7 @@ export function getApiBaseUrl(): string {
 
 /**
  * Recognize an object from a captured photo using Gemini Multimodal AI
- * Tries backend server first; seamlessly falls back to direct client-side Gemini Vision if standalone on phone.
+ * Tries backend server first; seamlessly falls back to direct client-side Gemini Vision or smart CV contour analysis.
  */
 export async function recognizeAndGenerateCreature(
   imageBase64: string,
@@ -176,6 +198,7 @@ export async function recognizeAndGenerateCreature(
           const c = data.creature;
           const archetype =
             c.visualParams?.shapeArchetype ||
+            clientAnalyzed?.shapeArchetype ||
             detectObjectShapeArchetype(c.originalObject || c.name, c.objectDna?.visualIdentity?.shape);
           return {
             creature: {
@@ -197,126 +220,154 @@ export async function recognizeAndGenerateCreature(
     }
   }
 
-  // 2. Direct Client-Side Gemini Multimodal Call (Zero-dependency on server, works on 5G/Mobile Data outside)
-  try {
-    console.log('Connecting directly to Google Gemini Multimodal Vision API...');
-    const ai = new GoogleGenAI({ apiKey: DEFAULT_GEMINI_KEY });
+  // 2. Direct Client-Side Gemini Multimodal Call (Zero-dependency on server, works anywhere)
+  const activeKey = getUserGeminiApiKey();
+  if (activeKey) {
+    try {
+      console.log('Connecting directly to Google Gemini Multimodal Vision API...');
+      const ai = new GoogleGenAI({ apiKey: activeKey });
 
-    let cleanBase64 = imageBase64;
-    let cleanMime = 'image/jpeg';
-    if (cleanBase64.startsWith('data:')) {
-      const commaIndex = cleanBase64.indexOf(',');
-      if (commaIndex !== -1) {
-        const header = cleanBase64.slice(0, commaIndex);
-        const match = header.match(/^data:([^;]+);base64/);
-        if (match) cleanMime = match[1];
-        cleanBase64 = cleanBase64.slice(commaIndex + 1);
-      }
-    }
-
-    const parts: any[] = [
-      {
-        inlineData: {
-          mimeType: cleanMime,
-          data: cleanBase64,
-        },
-      },
-      {
-        text: `Player captured this real-world object photo. ${
-          promptHint ? `Player provided note: "${promptHint}".` : ''
+      let cleanBase64 = imageBase64;
+      let cleanMime = 'image/jpeg';
+      if (cleanBase64.startsWith('data:')) {
+        const commaIndex = cleanBase64.indexOf(',');
+        if (commaIndex !== -1) {
+          const header = cleanBase64.slice(0, commaIndex);
+          const match = header.match(/^data:([^;]+);base64/);
+          if (match) cleanMime = match[1];
+          cleanBase64 = cleanBase64.slice(commaIndex + 1);
         }
+      }
+
+      const parts: any[] = [
+        {
+          inlineData: {
+            mimeType: cleanMime,
+            data: cleanBase64,
+          },
+        },
+        {
+          text: `Player captured this real-world object photo. ${
+            promptHint ? `Player provided note: "${promptHint}".` : ''
+          }
 ${
   clientAnalyzed?.primaryHex
     ? `Sensor detected dominant color: ${clientAnalyzed.primaryHex}, secondary: ${clientAnalyzed.secondaryHex}. Match the robot armor to these colors.`
     : ''
 }
+${
+  clientAnalyzed?.shapeArchetype
+    ? `Contour analysis detected physical shape: ${clientAnalyzed.detectedShapeLabel} (${clientAnalyzed.shapeArchetype}). MANDATORY: Set visualParams.shapeArchetype to "${clientAnalyzed.shapeArchetype}".`
+    : ''
+}
 Player exploration distance: ${distanceMeters} meters.
 Identify the object precisely and generate the Transformers battle mech in valid JSON.`,
-      },
-    ];
+        },
+      ];
 
-    const models = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-latest'];
-    let rawOutput = '';
+      const models = [
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-flash-latest',
+      ];
+      let rawOutput = '';
 
-    for (const model of models) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: { parts },
-          config: {
-            systemInstruction: CREATURE_SYSTEM_PROMPT,
-            responseMimeType: 'application/json',
-          },
-        });
-        if (response.text) {
-          rawOutput = response.text;
-          break;
+      for (const model of models) {
+        try {
+          const response = await ai.models.generateContent({
+            model,
+            contents: { parts },
+            config: {
+              systemInstruction: CREATURE_SYSTEM_PROMPT,
+              responseMimeType: 'application/json',
+            },
+          });
+          if (response.text) {
+            rawOutput = response.text;
+            break;
+          }
+        } catch (modelErr: any) {
+          console.warn(`Direct model ${model} note:`, modelErr?.message || modelErr);
         }
-      } catch (modelErr: any) {
-        console.warn(`Direct model ${model} note:`, modelErr?.message || modelErr);
       }
+
+      if (rawOutput) {
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(rawOutput);
+        } catch {
+          const cleaned = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();
+          parsed = JSON.parse(cleaned);
+        }
+
+        if (parsed && parsed.name) {
+          // Guarantee shape, color and stats
+          const primaryColor = parsed.visualParams?.primaryColor || clientAnalyzed?.primaryHex || '#2BE29E';
+          const secondaryColor = parsed.visualParams?.secondaryColor || clientAnalyzed?.secondaryHex || '#091B14';
+          const shapeArchetype =
+            parsed.visualParams?.shapeArchetype ||
+            clientAnalyzed?.shapeArchetype ||
+            detectObjectShapeArchetype(parsed.originalObject || promptHint, parsed.objectDna?.visualIdentity?.shape);
+
+          const template = OBJECT_PRESETS[0].defaultCreature;
+          const creature: BattleCreature = {
+            ...template,
+            id: `creature-${Date.now()}`,
+            name: parsed.name,
+            originalObject: parsed.originalObject || clientAnalyzed?.suggestedOriginalObject || promptHint || 'Real-World Scanned Artifact',
+            faction: parsed.faction || 'Autobot',
+            robotClass: parsed.robotClass || 'Warrior',
+            objectFeature: parsed.objectFeature || 'Energon Reinforced Plating',
+            element: parsed.element || 'cyber',
+            rarity: parsed.rarity || 'Epic',
+            lore: parsed.lore || 'Awakened by Allspark energy from a real-world object.',
+            stats: {
+              hp: parsed.stats?.hp || 650,
+              attack: parsed.stats?.attack || 110,
+              defense: parsed.stats?.defense || 85,
+              speed: parsed.stats?.speed || 12,
+            },
+            visualParams: {
+              ...template.visualParams,
+              primaryColor,
+              secondaryColor,
+              scale: parsed.visualParams?.bodyScale || 1.15,
+              shapeArchetype,
+            },
+            objectDna: parsed.objectDna,
+            capturedImageUrl: imageBase64,
+            createdAt: Date.now(),
+          };
+
+          // Derive authentic combat DNA
+          creature.combatDna = deriveCombatDna(creature);
+
+          console.log(`Gemini identified object as: "${creature.originalObject}" (${shapeArchetype}) -> Created Mech: "${creature.name}"`);
+          return { creature, isAIGenerated: true };
+        }
+      }
+    } catch (directErr) {
+      console.error('Direct Gemini vision call error:', directErr);
     }
-
-    if (rawOutput) {
-      let parsed: any = null;
-      try {
-        parsed = JSON.parse(rawOutput);
-      } catch {
-        const cleaned = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();
-        parsed = JSON.parse(cleaned);
-      }
-
-      if (parsed && parsed.name) {
-        // Guarantee color and stats
-        const primaryColor = parsed.visualParams?.primaryColor || clientAnalyzed?.primaryHex || '#2BE29E';
-        const secondaryColor = parsed.visualParams?.secondaryColor || clientAnalyzed?.secondaryHex || '#091B14';
-
-        const template = OBJECT_PRESETS[0].defaultCreature;
-        const creature: BattleCreature = {
-          ...template,
-          id: `creature-${Date.now()}`,
-          name: parsed.name,
-          originalObject: parsed.originalObject || promptHint || 'Real-World Scanned Artifact',
-          faction: parsed.faction || 'Autobot',
-          robotClass: parsed.robotClass || 'Warrior',
-          objectFeature: parsed.objectFeature || 'Energon Reinforced Plating',
-          element: parsed.element || 'cyber',
-          rarity: parsed.rarity || 'Epic',
-          lore: parsed.lore || 'Awakened by Allspark energy from a real-world object.',
-          stats: {
-            hp: parsed.stats?.hp || 650,
-            attack: parsed.stats?.attack || 110,
-            defense: parsed.stats?.defense || 85,
-            speed: parsed.stats?.speed || 12,
-          },
-          visualParams: {
-            ...template.visualParams,
-            primaryColor,
-            secondaryColor,
-            scale: parsed.visualParams?.bodyScale || 1.15,
-            shapeArchetype:
-              parsed.visualParams?.shapeArchetype ||
-              detectObjectShapeArchetype(parsed.originalObject || promptHint, parsed.objectDna?.visualIdentity?.shape),
-          },
-          objectDna: parsed.objectDna,
-          capturedImageUrl: imageBase64,
-          createdAt: Date.now(),
-        };
-
-        // Derive authentic combat DNA
-        creature.combatDna = deriveCombatDna(creature);
-
-        console.log(`Gemini identified object as: "${creature.originalObject}" -> Created Mech: "${creature.name}"`);
-        return { creature, isAIGenerated: true };
-      }
-    }
-  } catch (directErr) {
-    console.error('Direct Gemini vision call error:', directErr);
   }
 
-  // 3. Fallback to intelligent procedural synthesis if no network connectivity
+  // 3. Intelligent computer-vision contour & procedural synthesis
+  // Faithfully matches the exact physical shape (cylinder, sheet_slab, sphere_round, cuboid_box) and real photo colors!
   const template = OBJECT_PRESETS[0].defaultCreature;
-  const objName = promptHint || 'Real-World Artifact';
+  const assignedShape =
+    clientAnalyzed?.shapeArchetype ||
+    detectObjectShapeArchetype(promptHint || 'Real-World Artifact');
+  const objName =
+    clientAnalyzed?.suggestedOriginalObject ||
+    promptHint ||
+    clientAnalyzed?.detectedShapeLabel ||
+    'Real-World Physical Artifact';
+  const robotName =
+    clientAnalyzed?.suggestedRobotName ||
+    (promptHint ? `Titan ${promptHint}` : 'Cybertron Sentinel');
+
   const derivedStats = deriveCreatureStatsFromComplexityAndDistance(
     clientAnalyzed?.complexity || {
       scaleTier: 'compact',
@@ -341,7 +392,7 @@ Identify the object precisely and generate the Transformers battle mech in valid
     id: `creature-${Date.now()}`,
     capturedImageUrl: imageBase64,
     originalObject: objName,
-    name: promptHint ? `Titan ${promptHint}` : 'Cybertron Sentinel',
+    name: robotName,
     stats: {
       hp: derivedStats.hp,
       attack: derivedStats.attack,
@@ -352,7 +403,7 @@ Identify the object precisely and generate the Transformers battle mech in valid
       ...template.visualParams,
       primaryColor: clientAnalyzed?.primaryHex || '#2BE29E',
       secondaryColor: clientAnalyzed?.secondaryHex || '#0E281E',
-      shapeArchetype: detectObjectShapeArchetype(objName),
+      shapeArchetype: assignedShape,
     },
     createdAt: Date.now(),
   };
