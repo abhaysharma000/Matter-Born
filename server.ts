@@ -32,6 +32,28 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });
 });
 
+// Explicit, Uncached Production APK Download Route
+app.get(["/Matter-Born.apk", "/api/download-apk"], (_req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Content-Type", "application/vnd.android.package-archive");
+  res.setHeader("Content-Disposition", 'attachment; filename="Matter-Born.apk"');
+
+  const candidates = [
+    path.join(process.cwd(), "public", "Matter-Born.apk"),
+    path.join(process.cwd(), "dist", "Matter-Born.apk"),
+    path.join(process.cwd(), "Matter-Born.apk")
+  ];
+
+  for (const apkPath of candidates) {
+    if (fs.existsSync(apkPath)) {
+      return res.sendFile(apkPath);
+    }
+  }
+  res.status(404).send("APK build not found on server.");
+});
+
 // IP Geolocation fallback endpoint for devices without hardware GPS (e.g. desktops/laptops)
 app.get("/api/ip-location", async (_req, res) => {
   try {
