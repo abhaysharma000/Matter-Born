@@ -58,7 +58,7 @@ export const LanServerModal: React.FC<LanServerModalProps> = ({ onClose }) => {
 
   const handleResetDefault = () => {
     sound.playClick();
-    const defaultHost = 'http://172.32.1.134:3000';
+    const defaultHost = 'https://matter-born.onrender.com';
     setHostUrl(defaultHost);
     testConnection(defaultHost);
   };
@@ -135,13 +135,13 @@ export const LanServerModal: React.FC<LanServerModalProps> = ({ onClose }) => {
         {/* Host URL Input */}
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-[#143823] flex items-center justify-between">
-            <span>Server IP & Port (Laptop on Wi-Fi)</span>
+            <span>Multiplayer Server URL (Global Cloud)</span>
             <button
-              type="button"
-              onClick={handleResetDefault}
-              className="text-[11px] text-emerald-700 hover:underline font-bold cursor-pointer"
-            >
-              Reset to 172.32.1.134
+               type="button"
+               onClick={handleResetDefault}
+               className="text-[11px] text-emerald-700 hover:underline font-bold cursor-pointer"
+             >
+              Reset to Render Cloud
             </button>
           </label>
           <div className="relative">
@@ -149,13 +149,13 @@ export const LanServerModal: React.FC<LanServerModalProps> = ({ onClose }) => {
               type="text"
               value={hostUrl}
               onChange={(e) => setHostUrl(e.target.value)}
-              placeholder="http://172.32.1.134:3000"
+              placeholder="https://matter-born.onrender.com"
               className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#E8F2EA] border border-[#CFE2D3] font-mono text-xs text-[#0E3323] focus:outline-hidden focus:border-emerald-600 shadow-inner"
             />
             <Server className="w-4 h-4 text-[#4D6957] absolute left-3 top-1/2 -translate-y-1/2" />
           </div>
           <p className="text-[11px] text-[#4D6957]">
-            Make sure your team's phones and your laptop are on the same Wi-Fi network.
+            24/7 Global Multiplayer is active! Works across cellular (4G/5G) and any Wi-Fi anywhere in the world.
           </p>
         </div>
 

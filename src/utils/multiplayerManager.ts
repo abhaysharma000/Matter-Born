@@ -95,11 +95,8 @@ class MultiplayerManager {
     if (custom && custom.trim()) {
       return custom.trim().replace(/\/+$/, '');
     }
-    // On native mobile (Capacitor) or localhost, default to local Wi-Fi host IP:
-    if (typeof (window as any).Capacitor !== 'undefined' || window.location.hostname === 'localhost') {
-      return 'http://172.32.1.134:3000';
-    }
-    return window.location.origin;
+    // Default to the live 24/7 global cloud multiplayer server on Render:
+    return 'https://matter-born.onrender.com';
   }
 
   public setServerHostUrl(url: string): void {

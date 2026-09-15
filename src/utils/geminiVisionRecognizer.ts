@@ -154,17 +154,16 @@ export function detectObjectShapeArchetype(
  */
 export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
-    // If running in Capacitor / local mobile wrapper
+    // If running in Capacitor / mobile app
     if (
       (window.location.hostname === 'localhost' && window.location.protocol === 'https:') ||
       window.location.protocol === 'capacitor:' ||
       window.location.protocol === 'file:'
     ) {
-      // Connect to the local network IP where dev server runs
-      return 'http://172.32.1.134:3000';
+      return 'https://matter-born.onrender.com';
     }
   }
-  return '';
+  return 'https://matter-born.onrender.com';
 }
 
 /**
@@ -179,11 +178,10 @@ export async function recognizeAndGenerateCreature(
 ): Promise<{ creature: BattleCreature; isAIGenerated: boolean }> {
   const baseUrl = getApiBaseUrl();
   const candidateEndpoints = [
-    'http://localhost:3000/api/creature/generate',
-    'http://127.0.0.1:3000/api/creature/generate',
     `${baseUrl}/api/creature/generate`,
+    'https://matter-born.onrender.com/api/creature/generate',
     '/api/creature/generate',
-    'http://172.32.1.134:3000/api/creature/generate',
+    'http://localhost:3000/api/creature/generate',
   ].filter(Boolean);
 
   // 1. Try server endpoints first
