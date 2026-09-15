@@ -26,6 +26,7 @@ interface NavbarProps {
   pendingQuestsCount: number;
   onOpenPass?: () => void;
   onOpenServerSettings?: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSound,
   onOpenPass,
   onOpenServerSettings,
+  onOpenAuth,
 }) => {
   const [ep, setEp] = useState<number>(getExplorationPoints());
 
@@ -169,16 +171,33 @@ export const Navbar: React.FC<NavbarProps> = ({
             {soundEnabled ? <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" /> : <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-stone-400" />}
           </button>
 
-          {/* Player Avatar */}
+          {/* Player Avatar & Auth Indicator */}
           <button
             id="navbar-profile-btn"
             data-testid="navbar-profile-btn"
             onClick={onOpenProfile}
-            className="flex items-center gap-1.5 pl-1 pr-1.5 sm:pl-1.5 sm:pr-2.5 py-1 rounded-xl bg-[#DCE8DE] hover:bg-[#D3E0D6] border border-[#CADCD0] transition-colors cursor-pointer"
-            title="View Profile & Stats"
+            className="flex items-center gap-1.5 pl-1 pr-1.5 sm:pl-1.5 sm:pr-2.5 py-1 rounded-xl bg-[#DCE8DE] hover:bg-[#D3E0D6] border border-[#CADCD0] transition-colors cursor-pointer relative"
+            title={user.authProvider === 'google' ? `Logged in with Google: ${user.name}` : `Guest Pilot: ${user.name} (Tap to link Google)`}
           >
-            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-[10px] sm:text-xs font-black">
-              {user.name.charAt(0).toUpperCase()}
+            <div className="relative">
+              {user.avatarUrl ? (
+                <img 
+                  src={user.avatarUrl} 
+                  alt={user.name} 
+                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg object-cover border border-emerald-500" 
+                />
+              ) : (
+                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-[10px] sm:text-xs font-black">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              {/* Provider indicator dot */}
+              <span 
+                className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border border-white ${
+                  user.authProvider === 'google' ? 'bg-blue-500' : 'bg-amber-500'
+                }`} 
+                title={user.authProvider === 'google' ? 'Google Connected' : 'Guest Account'}
+              />
             </div>
             <span className="hidden xs:inline text-xs font-bold text-[#0E3323]">
               Lv.{user.level}

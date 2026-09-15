@@ -30,6 +30,7 @@ interface ProfileModalProps {
   onUpdateUser: (updatedUser: PlatformUser) => void;
   onClose: () => void;
   onLaunchFriendBattle?: (friend: FriendProfile, room?: GameRoom) => void;
+  onOpenAuth?: () => void;
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
@@ -37,6 +38,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onUpdateUser,
   onClose,
   onLaunchFriendBattle,
+  onOpenAuth,
 }) => {
   const [activeTab, setActiveTab] = useState<'stats' | 'friends'>('stats');
   const [isEditingName, setIsEditingName] = useState(false);
@@ -252,9 +254,35 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               )}
             </div>
 
-            <p className="text-xs text-[#4D6957]">
-              {user.title} • Tier: <strong className="text-emerald-800">{user.rankTier}</strong> ({user.rankPoints} RP)
-            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <p className="text-xs text-[#4D6957]">
+                {user.title} • Tier: <strong className="text-emerald-800">{user.rankTier}</strong> ({user.rankPoints} RP)
+              </p>
+              
+              {/* Account Auth Badge */}
+              <div className="flex items-center gap-1.5">
+                {user.authProvider === 'google' ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    Google Account: {user.email || 'Linked'}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Guest Account
+                  </span>
+                )}
+                {onOpenAuth && (
+                  <button
+                    type="button"
+                    onClick={onOpenAuth}
+                    className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                  >
+                    {user.authProvider === 'google' ? 'Switch Account' : 'Link Google Account'}
+                  </button>
+                )}
+              </div>
+            </div>
 
             {/* Level XP Progress Bar */}
             <div className="pt-2 max-w-sm space-y-1">

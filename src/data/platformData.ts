@@ -510,9 +510,10 @@ export const DEFAULT_DAILY_QUESTS: DailyQuest[] = [
 
 export const INITIAL_USER: PlatformUser = {
   id: 'usr-player-1',
-  name: 'PaperKnight',
+  name: 'CyberPilot-89',
+  authProvider: 'guest',
   avatarIcon: 'Square',
-  title: 'Territory Contender',
+  title: 'Cybertron Scout',
   level: 8,
   currentXp: 680,
   maxXp: 1000,

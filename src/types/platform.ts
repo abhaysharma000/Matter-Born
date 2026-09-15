@@ -63,6 +63,10 @@ export interface ShopItem {
 export interface PlatformUser {
   id: string;
   name: string;
+  authProvider?: 'guest' | 'google';
+  email?: string;
+  avatarUrl?: string;
+  googleId?: string;
   avatarIcon: string;
   title: string;
   level: number;

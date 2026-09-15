@@ -15,6 +15,7 @@ import { CreatureMorphModal } from './components/morph/CreatureMorphModal';
 import { MobileBottomNav } from './components/platform/MobileBottomNav';
 import { LanServerModal } from './components/platform/LanServerModal';
 import { IncomingNotificationOverlay } from './components/platform/IncomingNotificationOverlay';
+import { AuthModal } from './components/platform/AuthModal';
 import { PlatformUser, GameRoom, DailyQuest } from './types/platform';
 import { GameMode, MatchStats } from './types';
 import { BattleCreature } from './types/creature';
@@ -28,10 +29,12 @@ import confetti from 'canvas-confetti';
 
 const USER_STORAGE_KEY = 'paperio_platform_user_v2';
 const QUESTS_STORAGE_KEY = 'paperio_platform_quests_v2';
+const AUTH_PROMPTED_KEY = 'mb_auth_prompted_v1';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'games' | 'armory' | 'forge' | 'tournaments' | 'clans' | 'developer' | 'expedition'>('games');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(() => !localStorage.getItem(AUTH_PROMPTED_KEY));
 
   // One-time enforce zero EP for fresh walking progression
   useEffect(() => {
@@ -287,6 +290,7 @@ export default function App() {
         onOpenQuests={() => setIsQuestsOpen(true)}
         onOpenPass={() => setIsCybertronPassOpen(true)}
         onOpenServerSettings={() => setIsLanServerOpen(true)}
+        onOpenAuth={() => setIsAuthOpen(true)}
         soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled((prev) => !prev)}
         onQuickPlay={() => handleLaunchGame('animatrix-3d-arena', activeMode)}
@@ -393,6 +397,10 @@ export default function App() {
           user={user}
           onUpdateUser={handleUpdateUser}
           onClose={() => setIsProfileOpen(false)}
+          onOpenAuth={() => {
+            setIsProfileOpen(false);
+            setIsAuthOpen(true);
+          }}
           onLaunchFriendBattle={(friend, room) => {
             setIsProfileOpen(false);
             if (room) {
@@ -401,6 +409,20 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Google Sign-In & Guest Auth Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => {
+          localStorage.setItem(AUTH_PROMPTED_KEY, 'true');
+          setIsAuthOpen(false);
+        }}
+        currentUser={user}
+        onAuthSuccess={(updatedUser) => {
+          localStorage.setItem(AUTH_PROMPTED_KEY, 'true');
+          handleUpdateUser(updatedUser);
+        }}
+      />
 
       {/* Daily Quests Modal */}
       {isQuestsOpen && (
