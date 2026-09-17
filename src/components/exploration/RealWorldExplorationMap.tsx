@@ -142,7 +142,39 @@ function createRemotePlayerIcon(player: PlayerPresence, isFriend: boolean): L.Di
   });
 }
 
-// Discovery stars removed from map per user request
+function createGardenStarIcon(zone: DiscoveryZone): L.DivIcon {
+  const isClaimed = zone.claimed;
+  const borderColor = isClaimed ? 'border-emerald-400' : 'border-amber-400';
+  const glowShadow = isClaimed
+    ? 'shadow-[0_0_15px_rgba(16,185,129,0.7)]'
+    : 'shadow-[0_0_20px_rgba(245,158,11,0.85)]';
+  const badgeBg = isClaimed ? 'bg-emerald-950/95 text-emerald-300' : 'bg-stone-950/95 text-amber-300';
+  const iconSymbol = isClaimed ? '✓' : '⭐';
+  const statusLabel = isClaimed ? 'Claimed (+1000 EP)' : 'Bonus 1000 EP';
+
+  return L.divIcon({
+    className: 'custom-leaflet-icon garden-star-marker',
+    html: `
+      <div class="flex flex-col items-center select-none cursor-pointer group pointer-events-auto" style="transform: translate(-50%, -50%);">
+        <!-- Always/Hover badge above the star -->
+        <div class="px-2 py-0.5 rounded-md border ${borderColor} ${badgeBg} ${glowShadow} text-[10px] font-black tracking-wider uppercase whitespace-nowrap mb-1 text-center flex items-center gap-1 backdrop-blur-md transition-transform group-hover:scale-110">
+          <span>${iconSymbol}</span>
+          <span class="text-white max-w-[110px] truncate">${zone.title}</span>
+          <span class="px-1 py-0.2 rounded text-[9px] ${isClaimed ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30' : 'bg-amber-500/25 text-amber-300 border border-amber-400/40 font-extrabold'}">${statusLabel}</span>
+        </div>
+        <!-- Pulsing Star Beacon Core -->
+        <div class="relative flex items-center justify-center">
+          ${!isClaimed ? '<div class="w-10 h-10 rounded-full bg-amber-400/30 animate-ping absolute"></div>' : ''}
+          <div class="w-8 h-8 rounded-full ${isClaimed ? 'bg-emerald-900 border-2 border-emerald-400 text-white' : 'bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 border-2 border-white text-stone-950'} shadow-xl flex items-center justify-center relative font-black text-sm">
+            ${isClaimed ? '✓' : '⭐'}
+          </div>
+        </div>
+      </div>
+    `,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+}
 
 export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = ({
   origin,
@@ -205,6 +237,7 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
   // Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     try {
       const map = L.map(mapContainerRef.current, {
@@ -223,15 +256,23 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         minZoom: OPENSTREETMAP_CONFIG.minZoom,
       });
 
+      let consecutiveTileErrors = 0;
       tileLayer.on('tileerror', () => {
-        setTileErrorDetected(true);
+        consecutiveTileErrors++;
+        if (consecutiveTileErrors >= 6) {
+          setTileErrorDetected(true);
+        }
+      });
+      tileLayer.on('tileload', () => {
+        consecutiveTileErrors = 0;
+        setTileErrorDetected(false);
       });
 
       tileLayer.addTo(map);
       tileLayerRef.current = tileLayer;
 
       // Invalidate size shortly after mount to ensure smooth immediate rendering
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         map.invalidateSize();
       }, 150);
 
@@ -257,16 +298,13 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       breadcrumbPolylineRef.current = polyline;
 
       mapInstanceRef.current = map;
-
-      return () => {
-        clearTimeout(timer);
-      };
     } catch (err) {
       console.warn('Leaflet map initialization notice:', err);
       setTileErrorDetected(true);
     }
 
     return () => {
+      if (timer) clearTimeout(timer);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -285,6 +323,17 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
       }
     };
   }, []);
+
+  // When switching from Radar view back to Street Map view, invalidate Leaflet layout size
+  useEffect(() => {
+    if (viewMode === 'map' && mapInstanceRef.current) {
+      const resizeTimer = setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize();
+      }, 120);
+      return () => clearTimeout(resizeTimer);
+    }
+  }, [viewMode]);
+
 
   // Update Breadcrumb Polyline
   useEffect(() => {
@@ -396,9 +445,11 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         map.setView(latLng, 19);
         isInitialCenteringDone.current = true;
       }
-    } else if (startMarkerRef.current) {
-      startMarkerRef.current.remove();
-      startMarkerRef.current = null;
+    } else {
+      if (startMarkerRef.current) {
+        startMarkerRef.current.remove();
+        startMarkerRef.current = null;
+      }
       rangeRingsRef.current.forEach((r) => r.remove());
       rangeRingsRef.current = [];
     }
@@ -456,17 +507,77 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         map.invalidateSize();
         isInitialCenteringDone.current = true;
       }
+    } else {
+      if (playerMarkerRef.current) {
+        playerMarkerRef.current.remove();
+        playerMarkerRef.current = null;
+      }
+      if (accuracyCircleRef.current) {
+        accuracyCircleRef.current.remove();
+        accuracyCircleRef.current = null;
+      }
     }
   }, [currentLocation, isFollowMode]);
 
-  // Discovery star markers removed per user request (clean map view)
+  // Sync Garden / Playground Star Markers on Leaflet Map
   useEffect(() => {
-    const currentMap = discoveryMarkersRef.current;
-    for (const [, marker] of currentMap.entries()) {
-      marker.remove();
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const activeIds = new Set<string>();
+
+    (discoveryZones || []).forEach((zone) => {
+      activeIds.add(zone.id);
+      const latLng: [number, number] = [zone.latitude, zone.longitude];
+
+      let marker = discoveryMarkersRef.current.get(zone.id);
+      if (!marker) {
+        marker = L.marker(latLng, {
+          icon: createGardenStarIcon(zone),
+          zIndexOffset: 400,
+        }).addTo(map);
+
+        // Tooltip showing "Bonus 1000 EP" on hover
+        marker.bindTooltip(
+          `
+          <div class="p-1.5 text-stone-900 text-center select-none font-sans">
+            <div class="text-[11px] font-black text-amber-900 flex items-center justify-center gap-1">
+              <span>${zone.claimed ? '✅' : '⭐'}</span>
+              <span>${zone.title}</span>
+            </div>
+            <div class="text-[10px] font-extrabold ${zone.claimed ? 'text-emerald-700' : 'text-amber-700'} mt-0.5 tracking-wider uppercase">
+              ${zone.claimed ? 'Claimed (+1,000 EP)' : 'Bonus 1000 EP'}
+            </div>
+          </div>
+          `,
+          {
+            permanent: false,
+            direction: 'top',
+            offset: [0, -22],
+          }
+        );
+
+        marker.on('click', () => {
+          sound.playClick();
+          setSelectedZone(zone);
+          if (onSelectZone) onSelectZone(zone);
+        });
+
+        discoveryMarkersRef.current.set(zone.id, marker);
+      } else {
+        marker.setLatLng(latLng);
+        marker.setIcon(createGardenStarIcon(zone));
+      }
+    });
+
+    // Remove obsolete markers
+    for (const [id, marker] of discoveryMarkersRef.current.entries()) {
+      if (!activeIds.has(id)) {
+        marker.remove();
+        discoveryMarkersRef.current.delete(id);
+      }
     }
-    currentMap.clear();
-  }, [discoveryZones]);
+  }, [discoveryZones, onSelectZone]);
 
 
 
@@ -839,6 +950,40 @@ export const RealWorldExplorationMap: React.FC<RealWorldExplorationMapProps> = (
         </div>
       )}
 
+      {/* Selected Garden / Playground Star Overlay Card */}
+      {selectedZone && (
+        <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-84 z-30 p-3.5 rounded-2xl bg-stone-950/95 border border-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.5)] backdrop-blur-md text-amber-100 space-y-2 animate-in fade-in slide-in-from-bottom-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">{selectedZone.claimed ? '✅' : '⭐'}</span>
+              <div>
+                <h4 className="font-black text-sm text-white leading-tight">{selectedZone.title}</h4>
+                <p className="text-[10px] text-amber-300/80 uppercase font-bold tracking-wider">
+                  {selectedZone.category ? `${selectedZone.category} Hub` : 'Nature Hub'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedZone(null)}
+              className="p-1 rounded-lg hover:bg-stone-800 text-stone-400 hover:text-white transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-200">Outdoor Bonus:</span>
+            <span className="text-xs font-black text-amber-400 bg-amber-400/20 px-2 py-0.5 rounded-md border border-amber-400/50">
+              {selectedZone.claimed ? 'Claimed (+1,000 EP)' : '+1,000 Bonus EP'}
+            </span>
+          </div>
+          <p className="text-[11px] text-stone-300 leading-snug">
+            {selectedZone.claimed
+              ? 'You have already collected this garden bonus today! Resets after 24 hours.'
+              : 'Walk within 60 meters of this star location to automatically collect the 1,000 EP bonus!'}
+          </p>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -960,8 +1105,42 @@ export const TacticalRadarMap: React.FC<{
           </text>
         </g>
 
-
-
+        {/* Garden & Playground Star Beacons in Radar View */}
+        {(discoveryZones || []).map((zone) => {
+          const pos = toSvgCoords(zone.latitude, zone.longitude);
+          if (pos.x < 15 || pos.x > 385 || pos.y < 15 || pos.y > 385) return null;
+          return (
+            <g
+              key={zone.id}
+              transform={`translate(${pos.x}, ${pos.y})`}
+              className="cursor-pointer"
+              onClick={() => onSelectZone && onSelectZone(zone)}
+            >
+              {!zone.claimed && (
+                <circle r="12" fill="#F59E0B" fillOpacity="0.3" className="animate-ping" />
+              )}
+              <circle
+                r="7"
+                fill={zone.claimed ? '#059669' : '#D97706'}
+                stroke={zone.claimed ? '#34D399' : '#FDE68A'}
+                strokeWidth="1.5"
+              />
+              <text y="3" textAnchor="middle" fontSize="8" fill="#FFF">
+                {zone.claimed ? '✓' : '⭐'}
+              </text>
+              <text
+                y="-10"
+                textAnchor="middle"
+                fill={zone.claimed ? '#A7F3D0' : '#FDE68A'}
+                fontSize="8"
+                fontFamily="sans-serif"
+                fontWeight="bold"
+              >
+                {zone.claimed ? 'Claimed' : 'Bonus 1000 EP'}
+              </text>
+            </g>
+          );
+        })}
 
         {/* Player Locator */}
         <g transform={`translate(${playerPos.x}, ${playerPos.y})`}>

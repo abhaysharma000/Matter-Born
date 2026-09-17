@@ -142,6 +142,9 @@ export interface DiscoveryZone {
   bonusTitle: string;
   bonusDescription: string;
   accentColor: string;
+  isGarden?: boolean;
+  bonusEp?: number;
+  category?: 'garden' | 'park' | 'playground' | 'ground' | 'pitch' | 'nature';
 }
 
 export interface ExplorationSession {

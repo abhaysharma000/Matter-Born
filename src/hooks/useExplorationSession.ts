@@ -21,6 +21,7 @@ import {
   DEFAULT_DEMO_COORDINATES,
   EXPLORATION_STORAGE_KEY,
   LIFETIME_EP_STORAGE_KEY,
+  EXPEDITION_MAX_AGE_MS,
 } from '../constants/explorationConfig';
 import {
   calculateHaversineDistance,
@@ -38,6 +39,11 @@ import {
   resetExplorationPoints,
 } from '../utils/forgeManager';
 import { sound } from '../utils/audio';
+import {
+  fetchNearbyGardensAndParks,
+  markGardenClaimedInStorage,
+  resetClaimedGardensStorage,
+} from '../utils/natureZones';
 
 export interface EpRewardToast {
   id: string;
@@ -59,13 +65,30 @@ export function useExplorationSession() {
       const stored = localStorage.getItem(EXPLORATION_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Wipe corrupted teleport sessions or oversized EP (> 1,000,000)
-        if (Number(parsed.distanceExplored) > 100000 || Number(parsed.explorationPoints) > 1000000) {
+        const sessionAge = Date.now() - (Number(parsed.savedAt) || Number(parsed.startedAt) || 0);
+        const is24HrExpired = sessionAge > EXPEDITION_MAX_AGE_MS;
+
+        // Wipe corrupted teleport sessions, oversized EP (> 1,000,000), or previous sessions older than 24 hours
+        if (is24HrExpired || Number(parsed.distanceExplored) > 100000 || Number(parsed.explorationPoints) > 1000000) {
           localStorage.removeItem(EXPLORATION_STORAGE_KEY);
-          lifetimeEp = 0;
+          if (Number(parsed.explorationPoints) > 1000000) {
+            lifetimeEp = 0;
+          }
         } else {
-          const maxDist = parsed.maxDistanceReached ?? parsed.distanceExplored ?? 0;
-          const currentDist = Number(parsed.distanceExplored) || 0;
+          // Check if origin or location timestamps are older than 24 hours
+          const originIsOld = Boolean(parsed.origin?.timestamp && Date.now() - Number(parsed.origin.timestamp) > EXPEDITION_MAX_AGE_MS);
+          const locationIsOld = Boolean(parsed.currentLocation?.timestamp && Date.now() - Number(parsed.currentLocation.timestamp) > EXPEDITION_MAX_AGE_MS);
+
+          const safeOrigin = originIsOld ? null : (parsed.origin || null);
+          const safeLocation = locationIsOld ? null : (parsed.currentLocation || null);
+          const currentDist = safeOrigin ? (Number(parsed.distanceExplored) || 0) : 0;
+          const maxDist = safeOrigin ? (parsed.maxDistanceReached ?? currentDist) : 0;
+
+          // Filter out breadcrumbs older than 24 hours
+          const validBreadcrumbs = (Array.isArray(parsed.breadcrumbs) ? parsed.breadcrumbs : []).filter(
+            (b: any) => !b.timestamp || Date.now() - Number(b.timestamp) < EXPEDITION_MAX_AGE_MS
+          );
+
           let activeMilestone: DiscoveryMilestoneConfig | null = null;
           let nextMilestone: DiscoveryMilestoneConfig | null = EXPLORATION_MILESTONES[0];
           for (let i = 0; i < EXPLORATION_MILESTONES.length; i++) {
@@ -89,9 +112,9 @@ export function useExplorationSession() {
           return {
             id: parsed.id || `exp-${Date.now()}`,
             adventureName: parsed.adventureName || 'My Adventure',
-            state: (parsed.state || 'IDLE') as ExplorationState,
-            origin: parsed.origin || null,
-            currentLocation: parsed.currentLocation || null,
+            state: (safeOrigin ? (parsed.state || 'EXPLORING') : 'IDLE') as ExplorationState,
+            origin: safeOrigin,
+            currentLocation: safeLocation,
             distanceExplored: currentDist,
             maxDistanceReached: Number(maxDist) || 0,
             speedMps: Number(parsed.speedMps) || 0,
@@ -103,7 +126,7 @@ export function useExplorationSession() {
             nextMilestone: parsed.nextMilestone !== undefined ? parsed.nextMilestone : nextMilestone,
             unlockedTiers: Array.isArray(parsed.unlockedTiers) ? parsed.unlockedTiers : [],
             activeDiscoveryZone: parsed.activeDiscoveryZone || null,
-            breadcrumbs: Array.isArray(parsed.breadcrumbs) ? parsed.breadcrumbs : [],
+            breadcrumbs: validBreadcrumbs,
             startedAt: Number(parsed.startedAt) || Date.now(),
             isSimulated: Boolean(parsed.isSimulated),
             explorationPoints: savedEp,
@@ -115,6 +138,7 @@ export function useExplorationSession() {
           };
         }
       }
+
     } catch {
       // ignore
     }
@@ -158,6 +182,11 @@ export function useExplorationSession() {
   const stationaryTimerRef = useRef<number | null>(null);
   const stationaryDurationRef = useRef<number>(0);
   const simulationIntervalRef = useRef<number | null>(null);
+  const discoveryZonesRef = useRef<DiscoveryZone[]>(discoveryZones);
+
+  useEffect(() => {
+    discoveryZonesRef.current = discoveryZones;
+  }, [discoveryZones]);
 
   // Sync with Forge updates across windows / components
   useEffect(() => {
@@ -221,8 +250,11 @@ export function useExplorationSession() {
           maxDistanceReached: session.maxDistanceReached,
           speedMps: session.speedMps ?? 0,
           unlockedTiers: session.unlockedTiers,
-          breadcrumbs: session.breadcrumbs.slice(-50), // keep latest 50
+          breadcrumbs: session.breadcrumbs
+            .filter((b) => !b.timestamp || Date.now() - b.timestamp < EXPEDITION_MAX_AGE_MS)
+            .slice(-50), // keep latest 50 within 24h
           startedAt: session.startedAt,
+          savedAt: Date.now(),
           isSimulated: session.isSimulated,
           explorationPoints: session.explorationPoints ?? 0,
           sessionPointsEarned: session.sessionPointsEarned ?? 0,
@@ -253,15 +285,86 @@ export function useExplorationSession() {
     session.currentScanPowerBonus,
   ]);
 
-  // Discovery zones removed from map per user request
-  const generateDiscoveryZones = useCallback((_origin: ExplorationOrigin): DiscoveryZone[] => {
-    return [];
+  // Automatic 24-hour expiration watcher for active map session
+  useEffect(() => {
+    const check24HrExpiration = () => {
+      setSession((prev) => {
+        const sessionTimestamp = prev.startedAt || 0;
+        if (prev.origin && sessionTimestamp > 0 && Date.now() - sessionTimestamp > EXPEDITION_MAX_AGE_MS) {
+          console.log('[Exploration] 24 hours elapsed: automatically resetting previous map session and trail.');
+          localStorage.removeItem(EXPLORATION_STORAGE_KEY);
+          resetClaimedGardensStorage();
+          lastReadingRef.current = null;
+          return {
+            ...prev,
+            id: `exp-${Date.now()}`,
+            state: 'IDLE',
+            origin: null,
+            distanceExplored: 0,
+            maxDistanceReached: 0,
+            speedMps: 0,
+            breadcrumbs: [],
+            startedAt: Date.now(),
+            sessionPointsEarned: 0,
+            activeMilestone: null,
+            nextMilestone: EXPLORATION_MILESTONES[0],
+          };
+        }
+        return prev;
+      });
+    };
+
+    // Check periodically (every minute) and when tab becomes active / app is reopened
+    const timer = setInterval(check24HrExpiration, 60000);
+    window.addEventListener('visibilitychange', check24HrExpiration);
+    window.addEventListener('focus', check24HrExpiration);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('visibilitychange', check24HrExpiration);
+      window.removeEventListener('focus', check24HrExpiration);
+    };
   }, []);
 
-  // Update Discovery zones (kept empty per request)
-  useEffect(() => {
-    setDiscoveryZones([]);
+  // Load nearby parks/gardens/playgrounds with Star markers & +1000 Bonus EP
+  const lastFetchedCoordRef = useRef<{ lat: number; lon: number } | null>(null);
+
+  const loadNatureZones = useCallback(async (lat: number, lon: number) => {
+    if (!lat || !lon) return;
+    if (
+      lastFetchedCoordRef.current &&
+      calculateHaversineDistance(
+        lastFetchedCoordRef.current.lat,
+        lastFetchedCoordRef.current.lon,
+        lat,
+        lon
+      ) < 350
+    ) {
+      return;
+    }
+    lastFetchedCoordRef.current = { lat, lon };
+    try {
+      const zones = await fetchNearbyGardensAndParks(lat, lon);
+      setDiscoveryZones(zones);
+    } catch (err) {
+      console.warn('Failed to load nearby nature zones:', err);
+    }
   }, []);
+
+  // Fetch or refresh nature hubs whenever player location or origin changes
+  useEffect(() => {
+    const lat = session.currentLocation?.latitude || session.origin?.latitude;
+    const lon = session.currentLocation?.longitude || session.origin?.longitude;
+    if (lat && lon) {
+      loadNatureZones(lat, lon);
+    }
+  }, [
+    session.currentLocation?.latitude,
+    session.currentLocation?.longitude,
+    session.origin?.latitude,
+    session.origin?.longitude,
+    loadNatureZones,
+  ]);
 
   // Handle incoming verified GPS reading
   const processLocationReading = useCallback(
@@ -290,15 +393,19 @@ export function useExplorationSession() {
         // Calculate incremental step distance from last valid reading
         let stepDist = 0;
         if (lastReadingRef.current) {
-          const delta = calculateHaversineDistance(
-            lastReadingRef.current.latitude,
-            lastReadingRef.current.longitude,
-            reading.latitude,
-            reading.longitude
-          );
-          // Count genuine walking movements (>= 0.6m and <= 25m to filter jitter/teleport)
-          if (delta >= 0.6 && delta <= 25) {
-            stepDist = delta;
+          const readingAge = Date.now() - (lastReadingRef.current.timestamp || 0);
+          // Only calculate step delta if last reading is recent (< 5 minutes)
+          if (readingAge < 5 * 60 * 1000) {
+            const delta = calculateHaversineDistance(
+              lastReadingRef.current.latitude,
+              lastReadingRef.current.longitude,
+              reading.latitude,
+              reading.longitude
+            );
+            // Count genuine walking movements (>= 0.6m and <= 25m to filter jitter/teleport)
+            if (delta >= 0.6 && delta <= 25) {
+              stepDist = delta;
+            }
           }
         }
 
@@ -393,6 +500,39 @@ export function useExplorationSession() {
           });
         }
         const updatedClaimed = Array.from(new Set([...(prev.claimedMilestones || []), ...rewardCalc.newMilestonesToClaim]));
+
+        // Check proximity to nearby Garden / Playground Star Zones (< 65m)
+        discoveryZonesRef.current.forEach((zone) => {
+          if (zone.isGarden && !zone.claimed) {
+            const distToGarden = calculateHaversineDistance(
+              reading.latitude,
+              reading.longitude,
+              zone.latitude,
+              zone.longitude
+            );
+            if (distToGarden <= 65) {
+              zone.claimed = true;
+              markGardenClaimedInStorage(zone.id);
+              const gardenBonus = zone.bonusEp || 1000;
+              updatedTotalEp += gardenBonus;
+              setExplorationPoints(updatedTotalEp);
+              recordExpeditionProgress(maxDist, gardenBonus);
+              try {
+                sound.playBonus();
+              } catch {}
+              setRecentReward({
+                id: `garden-reward-${zone.id}-${Date.now()}`,
+                epAmount: gardenBonus,
+                milestoneTitle: `⭐ ${zone.title} Discovered!`,
+                milestoneReached: true,
+                distanceMeters: Math.round(distToGarden),
+              });
+              setDiscoveryZones((allZones) =>
+                allZones.map((z) => (z.id === zone.id ? { ...z, claimed: true } : z))
+              );
+            }
+          }
+        });
 
         // Check stationary condition
         const isCurrentlyStationary = validation.effectiveSpeed < MIN_MOVEMENT_THRESHOLD;
@@ -687,9 +827,10 @@ export function useExplorationSession() {
       startGeolocationWatcher();
     };
 
-    // If we already have a recent valid location in session, we can start immediately!
+    // If we already have a recent valid location in session (< 5 minutes old), start immediately
     const existing = lastReadingRef.current || session.currentLocation;
-    if (existing && existing.latitude && existing.longitude) {
+    const isRecent = existing && existing.timestamp && (Date.now() - existing.timestamp < 5 * 60 * 1000);
+    if (existing && existing.latitude && existing.longitude && isRecent) {
       establishExpeditionWithOrigin(existing);
       return;
     }
@@ -859,8 +1000,14 @@ export function useExplorationSession() {
       currentScanPowerMultiplier: defaultTier.powerMultiplier,
       currentScanPowerBonus: defaultTier.powerBonusPercent,
     }));
-    setDiscoveryZones([]);
-  }, []);
+    resetClaimedGardensStorage();
+    lastFetchedCoordRef.current = null;
+    const lat = session.currentLocation?.latitude || session.origin?.latitude;
+    const lon = session.currentLocation?.longitude || session.origin?.longitude;
+    if (lat && lon) {
+      loadNatureZones(lat, lon);
+    }
+  }, [loadNatureZones, session.currentLocation, session.origin]);
 
   // Action: Reset All Points to 0 (Fresh mobile walk testing)
   const resetAllPointsToZero = useCallback(() => {
@@ -962,6 +1109,39 @@ export function useExplorationSession() {
         });
       }
       const updatedClaimed = Array.from(new Set([...(prev.claimedMilestones || []), ...rewardCalc.newMilestonesToClaim]));
+
+      // Check proximity to nearby Garden / Playground Star Zones during simulated walk (< 65m)
+      discoveryZonesRef.current.forEach((zone) => {
+        if (zone.isGarden && !zone.claimed) {
+          const distToGarden = calculateHaversineDistance(
+            newCoord.latitude,
+            newCoord.longitude,
+            zone.latitude,
+            zone.longitude
+          );
+          if (distToGarden <= 65) {
+            zone.claimed = true;
+            markGardenClaimedInStorage(zone.id);
+            const gardenBonus = zone.bonusEp || 1000;
+            updatedTotalEp += gardenBonus;
+            setExplorationPoints(updatedTotalEp);
+            recordExpeditionProgress(maxDist, gardenBonus);
+            try {
+              sound.playBonus();
+            } catch {}
+            setRecentReward({
+              id: `garden-sim-${zone.id}-${Date.now()}`,
+              epAmount: gardenBonus,
+              milestoneTitle: `⭐ ${zone.title} Discovered!`,
+              milestoneReached: true,
+              distanceMeters: Math.round(distToGarden),
+            });
+            setDiscoveryZones((allZones) =>
+              allZones.map((z) => (z.id === zone.id ? { ...z, claimed: true } : z))
+            );
+          }
+        }
+      });
 
       const breadcrumbs = [...prev.breadcrumbs, { lat: newCoord.latitude, lng: newCoord.longitude, timestamp: Date.now() }];
 
