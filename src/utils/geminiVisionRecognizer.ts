@@ -154,17 +154,20 @@ export function detectObjectShapeArchetype(
  */
 export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
-    // If running in Capacitor / mobile app
-    if (
-      (window.location.hostname === 'localhost' && window.location.protocol === 'https:') ||
-      window.location.protocol === 'capacitor:' ||
-      window.location.protocol === 'file:'
-    ) {
-      return 'https://matter-born.onrender.com';
+    const custom = localStorage.getItem('mb_server_host');
+    if (custom && custom.trim()) {
+      return custom.trim().replace(/\/+$/, '');
+    }
+    if (window.location && window.location.protocol.startsWith('http')) {
+      const { hostname, origin } = window.location;
+      if (hostname === 'localhost' || hostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname.includes('onrender.com')) {
+        return origin;
+      }
     }
   }
   return 'https://matter-born.onrender.com';
 }
+
 
 /**
  * Recognize an object from a captured photo using Gemini Multimodal AI

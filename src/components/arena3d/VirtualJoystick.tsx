@@ -1,14 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 
 interface VirtualJoystickProps {
   onMove: (vector: { x: number; z: number }) => void;
 }
 
-export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove }) => {
+export const VirtualJoystick: React.FC<VirtualJoystickProps> = memo(({ onMove }) => {
   const [active, setActive] = useState(false);
-  const [handlePos, setHandlePos] = useState({ x: 0, y: 0 });
   const baseRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLDivElement | null>(null);
   const touchIdRef = useRef<number | null>(null);
+  const baseCenterRef = useRef<{ x: number; y: number; maxRadius: number } | null>(null);
 
   // Keyboard controls listener (WASD / Arrows)
   useEffect(() => {
@@ -63,27 +64,30 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove }) => {
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {}
+
+    // Cache center coordinates once on touch start to eliminate getBoundingClientRect layout thrashing during move
     const rect = baseRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
+    const maxRadius = rect.width / 2;
+
+    baseCenterRef.current = { x: centerX, y: centerY, maxRadius };
     touchIdRef.current = e.pointerId;
     setActive(true);
 
     const deltaX = e.clientX - centerX;
     const deltaY = e.clientY - centerY;
-    updateStick(deltaX, deltaY, rect.width / 2);
+    updateStick(deltaX, deltaY, maxRadius);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!active || !baseRef.current) return;
+    if (!active || !baseCenterRef.current) return;
     if (touchIdRef.current !== null && e.pointerId !== touchIdRef.current) return;
-    const rect = baseRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
 
+    const { x: centerX, y: centerY, maxRadius } = baseCenterRef.current;
     const deltaX = e.clientX - centerX;
     const deltaY = e.clientY - centerY;
-    updateStick(deltaX, deltaY, rect.width / 2);
+    updateStick(deltaX, deltaY, maxRadius);
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -91,9 +95,12 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove }) => {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {}
     setActive(false);
-    setHandlePos({ x: 0, y: 0 });
+    if (thumbRef.current) {
+      thumbRef.current.style.transform = 'translate3d(0px, 0px, 0)';
+    }
     onMove({ x: 0, z: 0 });
     touchIdRef.current = null;
+    baseCenterRef.current = null;
   };
 
   const updateStick = (dx: number, dy: number, maxRadius: number) => {
@@ -104,7 +111,10 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove }) => {
     const stickX = Math.cos(angle) * clampedDist;
     const stickY = Math.sin(angle) * clampedDist;
 
-    setHandlePos({ x: stickX, y: stickY });
+    // Direct GPU transform update on thumb element for 120Hz smooth stick motion without React re-render overhead
+    if (thumbRef.current) {
+      thumbRef.current.style.transform = `translate3d(${stickX}px, ${stickY}px, 0)`;
+    }
 
     // Output normalized vector
     const normX = clampedDist > 5 ? stickX / maxRadius : 0;
@@ -128,15 +138,17 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove }) => {
       {/* Inner guide ring */}
       <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border border-dashed border-emerald-600/30 pointer-events-none" />
 
-      {/* Floating Joystick Thumb */}
+      {/* Floating Joystick Thumb with GPU accelerated translation */}
       <div
-        className="absolute w-10 h-10 sm:w-13 sm:h-13 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 shadow-md shadow-emerald-700/30 pointer-events-none flex items-center justify-center transition-transform duration-75"
+        ref={thumbRef}
+        className="absolute w-10 h-10 sm:w-13 sm:h-13 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 shadow-md shadow-emerald-700/30 pointer-events-none flex items-center justify-center will-change-transform"
         style={{
-          transform: `translate(${handlePos.x}px, ${handlePos.y}px)`,
+          transform: 'translate3d(0px, 0px, 0)',
         }}
       >
         <div className="w-3.5 h-3.5 rounded-full bg-[#FAF8F5] shadow-xs" />
       </div>
     </div>
   );
-};
+});
+

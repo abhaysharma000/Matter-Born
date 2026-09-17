@@ -104,7 +104,15 @@ export interface ArenaHUDState {
     z: number;
   }>;
   gameMode?: 'easy' | 'moderate' | 'hard';
+  isAutoCameraEnabled?: boolean;
 }
+
+// Mobile device detection for adaptive rendering & fillrate optimizations
+export const isMobileDevice = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 768px)').matches && 'ontouchstart' in window);
+};
 
 export class ThreeArenaEngine {
   private container: HTMLElement | null = null;
@@ -112,6 +120,14 @@ export class ThreeArenaEngine {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer | null = null;
   private animationFrameId: number | null = null;
+
+  // Mobile Performance & HUD State Caching
+  private lastHUDUpdateTime: number = 0;
+  private cachedRadarBushes: Array<{ x: number; z: number; radius: number }> = [];
+  private cachedRadarTrees: Array<{ x: number; z: number }> = [];
+  private frameCount: number = 0;
+  private lastFpsSampleTime: number = performance.now();
+  private isPerformanceDegraded: boolean = false;
 
   // Natural Biome & Tactical Cover System
   public floraSystem: ArenaFloraSystem | null = null;
@@ -187,9 +203,13 @@ export class ThreeArenaEngine {
   private lastAbilityWasPressed = false;
   private lastAbilityWarningTime = 0;
 
-  // 360° Free Camera Look (Mouse / Touch Look Joystick)
+  // 360° Free Camera Look (Mouse / Touch Look Joystick) & PUBG-Style Auto-Recentering
   public cameraYaw: number = 0;
   public cameraPitch: number = 0.52;
+  public readonly DEFAULT_CAMERA_PITCH: number = 0.52;
+  public isCameraTouching: boolean = false;
+  public lastCameraInteractionTime: number = performance.now();
+  public isAutoCameraEnabled: boolean = true;
 
   // Multiplayer Room Combat Synchronization
   public isMultiplayer: boolean = false;
@@ -199,10 +219,22 @@ export class ThreeArenaEngine {
   private remoteFighterTargets: Map<string, { x: number; y: number; z: number; rot: number }> = new Map();
 
   public rotateCamera(deltaYaw: number, deltaPitch: number) {
+    this.isCameraTouching = true;
+    this.lastCameraInteractionTime = performance.now();
     this.cameraYaw += deltaYaw;
     while (this.cameraYaw > Math.PI) this.cameraYaw -= Math.PI * 2;
     while (this.cameraYaw < -Math.PI) this.cameraYaw += Math.PI * 2;
     this.cameraPitch = Math.max(0.12, Math.min(1.20, this.cameraPitch + deltaPitch));
+  }
+
+  public setCameraTouchActive(active: boolean) {
+    this.isCameraTouching = active;
+    this.lastCameraInteractionTime = performance.now();
+  }
+
+  public toggleAutoCamera(): boolean {
+    this.isAutoCameraEnabled = !this.isAutoCameraEnabled;
+    return this.isAutoCameraEnabled;
   }
 
   // Callbacks
@@ -257,20 +289,24 @@ export class ThreeArenaEngine {
   }
 
   private setupLighting() {
+    const isMobile = isMobileDevice();
     this.ambientLight = new THREE.AmbientLight(0xffffff, 1.25); // Bright clean ambient illumination
     this.scene.add(this.ambientLight);
 
     this.sunLight = new THREE.DirectionalLight(0xffffff, 1.6); // High-noon sunlight
     this.sunLight.position.set(35, 60, 30);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
+    // 1024x1024 on mobile saves 75% memory bandwidth and shadow pass fillrate over 2048
+    const shadowDim = isMobile ? 1024 : 2048;
+    this.sunLight.shadow.mapSize.width = shadowDim;
+    this.sunLight.shadow.mapSize.height = shadowDim;
     this.sunLight.shadow.camera.near = 0.5;
     this.sunLight.shadow.camera.far = 250;
     this.sunLight.shadow.camera.left = -95;
     this.sunLight.shadow.camera.right = 95;
     this.sunLight.shadow.camera.top = 95;
     this.sunLight.shadow.camera.bottom = -95;
+    this.sunLight.shadow.bias = -0.0005;
     this.scene.add(this.sunLight);
 
     this.rimLight = new THREE.DirectionalLight(0x38bdf8, 0.7); // Light sky-blue fill light
@@ -607,7 +643,7 @@ export class ThreeArenaEngine {
       });
       const baseMesh = new THREE.Mesh(baseGeo, baseMat);
       baseMesh.position.set(x, 1.25, z);
-      baseMesh.castShadow = true;
+      baseMesh.castShadow = false; // Outer perimeter pylon base does not need to cast shadow
       this.scene.add(baseMesh);
 
       // Main Monolith Pillar Body (Tapered sci-fi tower)
@@ -619,7 +655,7 @@ export class ThreeArenaEngine {
       });
       const pillar = new THREE.Mesh(pillarGeo, pillarMat);
       pillar.position.set(x, 7.5, z);
-      pillar.castShadow = true;
+      pillar.castShadow = !isMobileDevice();
       this.scene.add(pillar);
 
       // Glowing Vertical Energon Core Conduit
@@ -672,23 +708,36 @@ export class ThreeArenaEngine {
     // 4. LUSH NATURE BIOME: 4,200 3D Grass Tufts, 12 Tactical Cover Trees, 16 Hiding Bushes
     this.floraSystem = buildArenaFlora(this.arenaRadius);
     this.scene.add(this.floraSystem.floraGroup);
+
+    // Pre-cache static radar elements once so they are not mapped and reallocated 60 times/sec
+    this.cachedRadarBushes = this.floraSystem.bushes.map((b) => ({
+      x: b.x,
+      z: b.z,
+      radius: b.radius,
+    }));
+    this.cachedRadarTrees = this.floraSystem.trees.map((t) => ({
+      x: t.x,
+      z: t.z,
+    }));
   }
 
   public initRenderer(container: HTMLElement) {
     this.container = container;
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
+    const isMobile = isMobileDevice();
 
     this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true, 
+      antialias: !isMobile, // On mobile TBDR GPUs, disabling antialias removes MSAA resolve penalties
       alpha: false,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      precision: isMobile ? 'mediump' : 'highp'
     });
     this.renderer.setSize(width, height);
-    // Optimized pixel ratio capped at 1.5 for ultra-smooth 60fps on high-DPI and mobile displays
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // Optimized pixel ratio: 1.15 on mobile displays for ultra-smooth 60fps; 1.5 on desktop
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.15 : 1.5));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFShadowMap;
 
     container.innerHTML = '';
     container.appendChild(this.renderer.domElement);
@@ -717,6 +766,8 @@ export class ThreeArenaEngine {
       this.camera.fov = 50;
     }
     this.camera.updateProjectionMatrix();
+    const isMobile = isMobileDevice();
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.15 : 1.5));
     this.renderer.setSize(width, height);
   };
 
@@ -1199,7 +1250,7 @@ export class ThreeArenaEngine {
     }
   }
 
-  // Primary Loop Tick
+  // Primary Loop Tick with Dynamic Adaptive Performance Monitor
   private tick = () => {
     if (!this.isRunning || this.isDestroyed) return;
 
@@ -1211,6 +1262,34 @@ export class ThreeArenaEngine {
 
       if (this.renderer && this.container) {
         this.renderer.render(this.scene, this.camera);
+      }
+
+      // Dynamic Performance Monitor: Auto-scale for budget mobile processors
+      this.frameCount++;
+      const now = performance.now();
+      const elapsed = now - this.lastFpsSampleTime;
+      if (elapsed >= 1500) { // Check every 1.5 seconds
+        const currentFps = (this.frameCount * 1000) / elapsed;
+        this.frameCount = 0;
+        this.lastFpsSampleTime = now;
+
+        if (isMobileDevice() && this.renderer && this.container) {
+          // If frame rate drops below 36 FPS on mobile, dynamically reduce pixel ratio and shadows
+          if (currentFps < 36 && !this.isPerformanceDegraded) {
+            this.isPerformanceDegraded = true;
+            this.renderer.setPixelRatio(0.9);
+            this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+            if (currentFps < 28) {
+              this.renderer.shadowMap.enabled = false;
+            }
+          } else if (currentFps > 54 && this.isPerformanceDegraded) {
+            // Smoothly recovered
+            this.isPerformanceDegraded = false;
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.15));
+            this.renderer.shadowMap.enabled = true;
+            this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+          }
+        }
       }
     } catch (err) {
       console.warn('ThreeArenaEngine render tick error suppressed:', err);
@@ -1743,8 +1822,40 @@ export class ThreeArenaEngine {
       }
     });
 
-    // 8. Snappy Third-Person Camera Follow with 360° Free Look
+    // 8. Snappy Third-Person Camera Follow with 360° Free Look & PUBG-Style Auto-Recentering
     if (!this.playerFighter.isDead) {
+      const now = performance.now();
+      const isPlayerMoving = Math.hypot(this.inputVector.x, this.inputVector.z) > 0.08 ||
+        Math.hypot(this.playerVelocity.x, this.playerVelocity.z) > 0.5;
+
+      // PUBG-Style Auto-Recentering:
+      // When the player is not actively touching/dragging the look controls:
+      // After ~0.5s while running or ~1.2s when stationary, camera smoothly glides back behind player
+      if (this.isAutoCameraEnabled && !this.isCameraTouching) {
+        const timeSinceTouch = (now - this.lastCameraInteractionTime) * 0.001; // in seconds
+        const triggerDelay = isPlayerMoving ? 0.5 : 1.2;
+
+        if (timeSinceTouch > triggerDelay) {
+          // 1. Smoothly return pitch to balanced default (0.52)
+          const pitchLerpSpeed = isPlayerMoving ? dt * 3.2 : dt * 1.8;
+          this.cameraPitch += (this.DEFAULT_CAMERA_PITCH - this.cameraPitch) * Math.min(1, pitchLerpSpeed);
+
+          // 2. Smoothly rotate yaw to sit directly behind the player's facing/movement direction
+          let targetYaw = this.playerFighter.rotation - Math.PI;
+          while (targetYaw > Math.PI) targetYaw -= Math.PI * 2;
+          while (targetYaw < -Math.PI) targetYaw += Math.PI * 2;
+
+          let diffYaw = targetYaw - this.cameraYaw;
+          while (diffYaw > Math.PI) diffYaw -= Math.PI * 2;
+          while (diffYaw < -Math.PI) diffYaw += Math.PI * 2;
+
+          const yawLerpSpeed = isPlayerMoving ? dt * 3.8 : dt * 2.2;
+          this.cameraYaw += diffYaw * Math.min(1, yawLerpSpeed);
+          while (this.cameraYaw > Math.PI) this.cameraYaw -= Math.PI * 2;
+          while (this.cameraYaw < -Math.PI) this.cameraYaw += Math.PI * 2;
+        }
+      }
+
       const isPortrait = this.camera.aspect < 1.0;
       const baseDist = isPortrait ? 22 : 18;
       const hDist = baseDist * Math.cos(this.cameraPitch);
@@ -1770,8 +1881,11 @@ export class ThreeArenaEngine {
     // 10. Check Victory / Defeat
     this.checkMatchConditions();
 
-    // 11. Emit HUD State with Real-World Environmental Sync
-    if (this.onHUDUpdateCallback) {
+    // 11. Emit HUD State with Real-World Environmental Sync (Throttled to ~22 FPS to eliminate React CPU bottlenecks)
+    const now = performance.now();
+    const isCriticalHudEvent = this.playerFighter.isDead || this.playerFighter.currentHp <= 0 || !this.isRunning;
+    if (this.onHUDUpdateCallback && (now - this.lastHUDUpdateTime >= 45 || isCriticalHudEvent)) {
+      this.lastHUDUpdateTime = now;
       const aliveCount = this.fighters.filter((f) => !f.isDead).length;
       this.onHUDUpdateCallback({
         playerHp: Math.round(this.playerFighter.currentHp),
@@ -1831,18 +1945,12 @@ export class ThreeArenaEngine {
         tacticalAdaptationHistory: this.tacticalAdaptationHistory,
         // Permanent Forge Upgrades Combat System
         forgeBonuses: this.forgeBonuses,
-        // Natural Biome & Tactical Foliage
+        // Natural Biome & Tactical Foliage (Using pre-cached arrays to avoid garbage collection pauses)
         isHidingInBush: this.isPlayerHidingInBush,
-        radarBushes: this.floraSystem?.bushes.map((b) => ({
-          x: b.x,
-          z: b.z,
-          radius: b.radius,
-        })),
-        radarTrees: this.floraSystem?.trees.map((t) => ({
-          x: t.x,
-          z: t.z,
-        })),
+        radarBushes: this.cachedRadarBushes,
+        radarTrees: this.cachedRadarTrees,
         gameMode: this.gameMode,
+        isAutoCameraEnabled: this.isAutoCameraEnabled,
       });
     }
   }

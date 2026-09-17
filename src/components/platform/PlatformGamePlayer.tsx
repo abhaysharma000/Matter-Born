@@ -302,6 +302,18 @@ export const PlatformGamePlayer: React.FC<PlatformGamePlayerProps> = ({
     }
   }, []);
 
+  const handleCameraTouchActive = useCallback((active: boolean) => {
+    if (engineRef.current) {
+      engineRef.current.setCameraTouchActive(active);
+    }
+  }, []);
+
+  const handleToggleAutoCamera = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.toggleAutoCamera();
+    }
+  }, []);
+
   // Global Keyboard Controls: Z to attack, Shift for dash, Space for jump, WASD/Arrows for move, X for skill
   useEffect(() => {
     const moveKeys = { w: false, a: false, s: false, d: false };
@@ -674,6 +686,8 @@ export const PlatformGamePlayer: React.FC<PlatformGamePlayerProps> = ({
           onVoiceCommand={handleVoiceCommand}
           onKineticTap={handleKineticTap}
           onTriggerAdaptation={handleTriggerAdaptation}
+          onCameraTouchActive={handleCameraTouchActive}
+          onToggleAutoCamera={handleToggleAutoCamera}
         />
       )}
 

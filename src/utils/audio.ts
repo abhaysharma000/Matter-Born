@@ -249,6 +249,10 @@ class SoundEffects {
     this.playVictory();
   }
 
+  public playReward() {
+    this.playVictory();
+  }
+
   public playError() {
     const ctx = this.getContext();
     if (!ctx) return;

@@ -29,35 +29,44 @@ export interface ArenaFloraSystem {
   dispose: () => void;
 }
 
+// Mobile device detection for adaptive rendering performance
+const isMobileDevice = typeof navigator !== 'undefined' && 
+  (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+   (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 768px)').matches && 'ontouchstart' in window));
+
 /**
  * Generates a rich, procedural organic grass canvas texture
  * with deep emerald gradients, subtle field stone pathways, and wild flora specks.
+ * Dynamically scaled for mobile to conserve texture memory and fillrate.
  */
 export function createGrassCanvasTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 1024;
+  const size = isMobileDevice ? 512 : 1024;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext('2d');
 
   if (ctx) {
+    const center = size / 2;
     // 1. Base vibrant lush meadow gradient
-    const grad = ctx.createRadialGradient(512, 512, 50, 512, 512, 512);
+    const grad = ctx.createRadialGradient(center, center, center * 0.1, center, center, center);
     grad.addColorStop(0, '#2d7a46'); // Bright sunlit center grass
     grad.addColorStop(0.4, '#1b5e34'); // Rich emerald meadow
     grad.addColorStop(0.8, '#144c29'); // Deep forest edge
     grad.addColorStop(1, '#0e3a1f');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1024, 1024);
+    ctx.fillRect(0, 0, size, size);
 
     // 2. Procedural grass blade clumps & mossy organic noise
     const colors = ['#22c55e', '#16a34a', '#15803d', '#4ade80', '#84cc16', '#14532d', '#365314'];
-    for (let i = 0; i < 9000; i++) {
-      const x = Math.random() * 1024;
-      const y = Math.random() * 1024;
-      const len = 3 + Math.random() * 8;
+    const bladeClumpCount = isMobileDevice ? 3000 : 9000;
+    for (let i = 0; i < bladeClumpCount; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const len = (3 + Math.random() * 8) * (size / 1024);
       const angle = (Math.random() - 0.5) * 1.5 - Math.PI / 2;
       ctx.strokeStyle = colors[Math.floor(Math.random() * colors.length)];
-      ctx.lineWidth = 1 + Math.random() * 2;
+      ctx.lineWidth = 1 + Math.random() * 1.5;
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
@@ -92,14 +101,14 @@ export function createGrassCanvasTexture(): THREE.CanvasTexture {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(8, 8);
-  texture.anisotropy = 8;
+  texture.anisotropy = isMobileDevice ? 2 : 8;
   texture.needsUpdate = true;
   return texture;
 }
 
 /**
  * Builds the complete arena flora system:
- * - 4,000 3D instanced grass tufts with wind sway
+ * - 4,000 3D instanced grass tufts with wind sway (optimized to 1,800 on mobile)
  * - 12 majestic stylized trees with solid trunks for physical projectile/movement cover
  * - 16 dense tactical bushes for player & creature hiding/stealth ambushes
  */
@@ -108,9 +117,10 @@ export function buildArenaFlora(arenaRadius: number): ArenaFloraSystem {
   floraGroup.name = 'ArenaFloraGroup';
 
   // ==========================================
-  // 1. INSTANCED 3D GRASS BLADES (4,200 TUFTS)
+  // 1. INSTANCED 3D GRASS BLADES (Mobile Optimized)
   // ==========================================
-  const grassCount = 4200;
+  // 1,800 on mobile keeps the field lush and green while halving instanced matrix calculations
+  const grassCount = isMobileDevice ? 1800 : 4200;
 
   // Create a stylized 3-blade grass cluster geometry
   const grassGeo = new THREE.BufferGeometry();
@@ -193,7 +203,9 @@ export function buildArenaFlora(arenaRadius: number): ArenaFloraSystem {
 
   const grassMesh = new THREE.InstancedMesh(grassGeo, grassMat, grassCount);
   grassMesh.receiveShadow = true;
-  grassMesh.castShadow = true;
+  // Performance optimization: Grass receives rich shadows from robots & trees,
+  // but NEVER casts shadows onto itself. Eliminates 37,800 polygons from the shadow depth pass!
+  grassMesh.castShadow = false;
 
   const grassDummy = new THREE.Object3D();
   const grassPalette = [
@@ -288,7 +300,8 @@ export function buildArenaFlora(arenaRadius: number): ArenaFloraSystem {
       rootMesh.position.set(Math.cos(rAngle) * 1.05, 0.7, Math.sin(rAngle) * 1.05);
       rootMesh.rotation.z = Math.cos(rAngle) * -0.4;
       rootMesh.rotation.x = Math.sin(rAngle) * 0.4;
-      rootMesh.castShadow = true;
+      rootMesh.castShadow = false;
+      rootMesh.receiveShadow = true;
       treeGroup.add(rootMesh);
     }
 
@@ -412,7 +425,7 @@ export function buildArenaFlora(arenaRadius: number): ArenaFloraSystem {
         Math.sin(sAngle) * sDist
       );
       satMesh.scale.set(1.0, 0.72, 1.0);
-      satMesh.castShadow = true;
+      satMesh.castShadow = false; // Main center bush dome already casts the complete ground shadow
       satMesh.receiveShadow = true;
       bushGroup.add(satMesh);
       foliageMeshes.push(satMesh);

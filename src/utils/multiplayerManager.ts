@@ -95,9 +95,22 @@ class MultiplayerManager {
     if (custom && custom.trim()) {
       return custom.trim().replace(/\/+$/, '');
     }
-    // Default to the live 24/7 global cloud multiplayer server on Render:
+    // If running in a browser on local dev, LAN Wi-Fi IP, or live Render deployment, default to current origin
+    if (typeof window !== 'undefined' && window.location) {
+      const { protocol, hostname, origin } = window.location;
+      if (protocol.startsWith('http')) {
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+          return origin;
+        }
+        if (hostname.includes('onrender.com')) {
+          return origin;
+        }
+      }
+    }
+    // Default to the live 24/7 global cloud multiplayer server on Render (e.g. for Capacitor APK):
     return 'https://matter-born.onrender.com';
   }
+
 
   public setServerHostUrl(url: string): void {
     const clean = url.trim().replace(/\/+$/, '');

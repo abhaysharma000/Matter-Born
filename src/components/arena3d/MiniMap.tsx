@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { Skull } from 'lucide-react';
 import { ArenaHUDState } from '../../game3d/ThreeArenaEngine';
 
@@ -6,7 +6,7 @@ interface MiniMapProps {
   hudState: ArenaHUDState;
 }
 
-export const MiniMap: React.FC<MiniMapProps> = ({ hudState }) => {
+export const MiniMap: React.FC<MiniMapProps> = memo(({ hudState }) => {
   const [hoveredFighter, setHoveredFighter] = useState<{ name: string; hp: number; maxHp: number } | null>(null);
 
   const arenaRadius = hudState.maxArenaRadius || 36;
@@ -274,4 +274,5 @@ export const MiniMap: React.FC<MiniMapProps> = ({ hudState }) => {
       )}
     </div>
   );
-};
+});
+

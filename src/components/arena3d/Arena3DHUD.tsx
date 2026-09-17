@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { 
   Volume2, 
   VolumeX, 
@@ -18,7 +18,9 @@ import {
   ChevronRight,
   Compass,
   Anvil,
-  Users
+  Users,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { BattleCreature } from '../../types/creature';
 import { ArenaHUDState } from '../../game3d/ThreeArenaEngine';
@@ -46,9 +48,11 @@ interface Arena3DHUDProps {
   onVoiceCommand?: (command: string) => void;
   onKineticTap?: () => void;
   onTriggerAdaptation?: (forcedPattern?: DetectedPlayerPattern) => void;
+  onCameraTouchActive?: (active: boolean) => void;
+  onToggleAutoCamera?: () => void;
 }
 
-export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
+export const Arena3DHUD: React.FC<Arena3DHUDProps> = memo(({
   creature,
   hudState,
   isMuted,
@@ -63,6 +67,8 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
   isPaused,
   onExit,
   onTriggerAdaptation,
+  onCameraTouchActive,
+  onToggleAutoCamera,
 }) => {
   const [showMaterialDrawer, setShowMaterialDrawer] = useState(false);
   const [showTacticalInspector, setShowTacticalInspector] = useState(false);
@@ -213,6 +219,28 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
             </div>
           </div>
 
+          {/* Auto-Camera / Free Look Toggle (PUBG-Style Balanced Eyes) */}
+          {onToggleAutoCamera && (
+            <button
+              onClick={onToggleAutoCamera}
+              className={`flex items-center gap-1 px-2.5 py-1.5 sm:py-2 rounded-2xl backdrop-blur-md border text-xs font-bold transition-all shadow-xl cursor-pointer ${
+                hudState.isAutoCameraEnabled !== false
+                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-emerald-950/50'
+                  : 'bg-[#071610]/92 border-[#184635] text-slate-400 hover:text-white'
+              }`}
+              title={hudState.isAutoCameraEnabled !== false ? 'Auto Camera: Active (Springs to character back)' : 'Auto Camera: Off (Free Look)'}
+            >
+              {hudState.isAutoCameraEnabled !== false ? (
+                <Eye className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <EyeOff className="w-4 h-4 text-slate-400" />
+              )}
+              <span className="hidden sm:inline text-[10px] font-mono font-black">
+                {hudState.isAutoCameraEnabled !== false ? 'AUTO CAM' : 'FREE CAM'}
+              </span>
+            </button>
+          )}
+
           {/* Sound Toggle */}
           <button
             onClick={onToggleMute}
@@ -277,7 +305,12 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
         </div>
 
         {/* Right Half Screen: Direct 360° Touch-to-Look Zone (Swipe/Drag to Look) */}
-        {onRotateCamera && <TouchLookJoystick onRotate={onRotateCamera} />}
+        {onRotateCamera && (
+          <TouchLookJoystick 
+            onRotate={onRotateCamera} 
+            onTouchActive={onCameraTouchActive}
+          />
+        )}
 
         {/* Bottom Right: Clean Ergonomic Action Cluster */}
         <div className="pointer-events-auto relative z-20 w-44 h-44 sm:w-48 sm:h-48 flex items-end justify-end select-none touch-none">
@@ -486,4 +519,5 @@ export const Arena3DHUD: React.FC<Arena3DHUDProps> = ({
 
     </div>
   );
-};
+});
+

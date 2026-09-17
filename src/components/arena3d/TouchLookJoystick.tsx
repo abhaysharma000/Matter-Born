@@ -1,17 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 import { Compass } from 'lucide-react';
 
 interface TouchLookZoneProps {
   onRotate: (deltaYaw: number, deltaPitch: number) => void;
+  onTouchActive?: (active: boolean) => void;
 }
 
-export const TouchLookZone: React.FC<TouchLookZoneProps> = ({ onRotate }) => {
+export const TouchLookZone: React.FC<TouchLookZoneProps> = memo(({ onRotate, onTouchActive }) => {
   const [showHint, setShowHint] = useState(true);
-  const [activeTouch, setActiveTouch] = useState<{ x: number; y: number } | null>(null);
+  const [isPointerActive, setIsPointerActive] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const ringRef = useRef<HTMLDivElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
   const lastClientPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const containerRectRef = useRef<{ left: number; top: number } | null>(null);
 
   // Auto-hide helper hint after 4 seconds
   useEffect(() => {
@@ -31,30 +34,42 @@ export const TouchLookZone: React.FC<TouchLookZoneProps> = ({ onRotate }) => {
     activePointerIdRef.current = e.pointerId;
     lastClientPosRef.current = { x: e.clientX, y: e.clientY };
 
+    // Cache rect only on pointer down to eliminate layout thrashing during drag
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect) {
-      setActiveTouch({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      containerRectRef.current = { left: rect.left, top: rect.top };
+      if (ringRef.current) {
+        ringRef.current.style.transform = `translate3d(${e.clientX - rect.left}px, ${e.clientY - rect.top}px, 0)`;
+      }
     }
 
+    setIsPointerActive(true);
+    onTouchActive?.(true);
     setShowHint(false);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (activePointerIdRef.current !== e.pointerId) return;
 
-    // Direct touch-swipe delta rotation (1-to-1 camera orbit, no joystick stick drift or auto-rotation)
+    // Direct touch-swipe delta rotation
     const deltaClientX = e.clientX - lastClientPosRef.current.x;
     const deltaClientY = e.clientY - lastClientPosRef.current.y;
     lastClientPosRef.current = { x: e.clientX, y: e.clientY };
 
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (rect) {
-      setActiveTouch({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    // Direct DOM transform update for 120Hz smooth touch ring without React re-render overhead
+    if (ringRef.current && containerRectRef.current) {
+      const touchX = e.clientX - containerRectRef.current.left;
+      const touchY = e.clientY - containerRectRef.current.top;
+      ringRef.current.style.transform = `translate3d(${touchX}px, ${touchY}px, 0)`;
     }
 
-    // Calibrated natural sensitivity for mobile touch swipe
-    const directYaw = deltaClientX * 0.0072;
-    const directPitch = -deltaClientY * 0.0052;
+    // Natural non-inverted touch look controls:
+    // Swipe Right (deltaClientX > 0) -> camera turns RIGHT
+    // Swipe Left (deltaClientX < 0)  -> camera turns LEFT
+    // Swipe Up (deltaClientY < 0)    -> camera tilts UP
+    // Swipe Down (deltaClientY > 0)  -> camera tilts DOWN
+    const directYaw = -deltaClientX * 0.0072;
+    const directPitch = deltaClientY * 0.0052;
 
     onRotate(directYaw, directPitch);
   };
@@ -65,7 +80,9 @@ export const TouchLookZone: React.FC<TouchLookZoneProps> = ({ onRotate }) => {
         e.currentTarget.releasePointerCapture(e.pointerId);
       } catch {}
       activePointerIdRef.current = null;
-      setActiveTouch(null);
+      setIsPointerActive(false);
+      onTouchActive?.(false);
+      containerRectRef.current = null;
     }
   };
 
@@ -87,19 +104,17 @@ export const TouchLookZone: React.FC<TouchLookZoneProps> = ({ onRotate }) => {
         </div>
       )}
 
-      {/* Subtle, unobtrusive touch trail ring that follows finger without blocking view */}
-      {activeTouch && (
-        <div
-          className="absolute w-12 h-12 -ml-6 -mt-6 rounded-full border border-emerald-400/30 bg-emerald-500/10 pointer-events-none transition-transform duration-75 scale-95"
-          style={{
-            left: `${activeTouch.x}px`,
-            top: `${activeTouch.y}px`,
-          }}
-        />
-      )}
+      {/* Subtle, unobtrusive touch trail ring that follows finger using GPU transform without blocking view */}
+      <div
+        ref={ringRef}
+        className={`absolute top-0 left-0 w-12 h-12 -ml-6 -mt-6 rounded-full border border-emerald-400/30 bg-emerald-500/10 pointer-events-none transition-opacity duration-150 will-change-transform ${
+          isPointerActive ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
     </div>
   );
-};
+});
 
 // Backward-compatible alias
 export const TouchLookJoystick = TouchLookZone;
+

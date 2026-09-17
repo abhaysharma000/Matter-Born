@@ -9,7 +9,8 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "build:apk": "npm run build && npx cap copy android && cd android && .\\gradlew.bat assembleDebug && cd .. && powershell -Command \"Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk Matter-Born.apk; Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk public\\Matter-Born.apk; Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk dist\\Matter-Born.apk\""
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

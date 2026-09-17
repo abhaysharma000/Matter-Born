@@ -320,3 +320,6 @@ export const LIFETIME_EP_STORAGE_KEY = 'animatrix_lifetime_exploration_points_v1
 export const LIFETIME_DISTANCE_STORAGE_KEY = 'animatrix_lifetime_distance_meters_v1';
 export const BEST_EXPEDITION_STORAGE_KEY = 'animatrix_best_expedition_distance_meters_v1';
 export const LIFETIME_TOTAL_EP_EARNED_KEY = 'animatrix_lifetime_total_ep_earned_v1';
+
+// Maximum session age before automatic 24-hour expiration reset
+export const EXPEDITION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 Hours (86,400,000 ms)
