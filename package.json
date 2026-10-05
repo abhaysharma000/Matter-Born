@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && node -e \"const fs=require('fs'); if(fs.existsSync('public/Matter-Born.apk')) fs.copyFileSync('public/Matter-Born.apk','dist/Matter-Born.apk');\" && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && node -e \"const fs=require('fs'); const src=fs.existsSync('apk/Matter-Born.apk')?'apk/Matter-Born.apk':fs.existsSync('public/Matter-Born.apk')?'public/Matter-Born.apk':'Matter-Born.apk'; if(fs.existsSync(src)){ fs.copyFileSync(src,'dist/Matter-Born.apk'); if(!fs.existsSync('apk/Matter-Born.apk')){ fs.mkdirSync('apk',{recursive:true}); fs.copyFileSync(src,'apk/Matter-Born.apk'); } if(!fs.existsSync('public/Matter-Born.apk')) fs.copyFileSync(src,'public/Matter-Born.apk'); }\" && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "build:apk": "npm run build && npx cap copy android && cd android && .\\gradlew.bat assembleDebug && cd .. && powershell -Command \"Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk Matter-Born.apk; Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk public\\Matter-Born.apk; Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk dist\\Matter-Born.apk\""
+    "build:apk": "npm run build && npx cap copy android && cd android && .\\gradlew.bat assembleDebug && cd .. && powershell -Command \"if (-not (Test-Path apk)) { New-Item -ItemType Directory -Path apk }; Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk apk\\Matter-Born.apk; Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk Matter-Born.apk; Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk public\\Matter-Born.apk; Copy-Item -Force android\\app\\build\\outputs\\apk\\debug\\app-debug.apk dist\\Matter-Born.apk\""
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

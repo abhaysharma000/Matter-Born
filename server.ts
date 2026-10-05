@@ -41,6 +41,7 @@ app.get(["/Matter-Born.apk", "/api/download-apk"], (_req, res) => {
   res.setHeader("Content-Disposition", 'attachment; filename="Matter-Born.apk"');
 
   const candidates = [
+    path.join(process.cwd(), "apk", "Matter-Born.apk"),
     path.join(process.cwd(), "public", "Matter-Born.apk"),
     path.join(process.cwd(), "dist", "Matter-Born.apk"),
     path.join(process.cwd(), "Matter-Born.apk")
