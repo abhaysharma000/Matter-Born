@@ -14,7 +14,7 @@ captures/
 .cxx/
 *.aab
 *.apk
-!Matter-Born.apk
+!apk/Matter-Born.apk
 output-metadata.json
 
 # IntelliJ

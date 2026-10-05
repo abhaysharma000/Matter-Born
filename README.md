@@ -3,10 +3,10 @@
 > **Real-World x AI x Transformers**: Snap any real-world physical object to transform it into a customized, battle-ready 3D Cybertronian battle mech (Autobot or Decepticon) and battle in dynamic 3D arenas powered by Google Gemini Generative AI and Three.js.
 
 [![API Documentation](https://img.shields.io/badge/API-Documentation-2BE29E?style=for-the-badge&logo=fastapi&logoColor=black)](API_README.md)
-[![Direct APK Download](https://img.shields.io/badge/Download-Matter--Born%20APK-00E5FF?style=for-the-badge&logo=android&logoColor=black)](https://github.com/abhaysharma000/Matter-Born/raw/main/Matter-Born.apk)
+[![Direct APK Download](https://img.shields.io/badge/Download-Matter--Born%20APK-00E5FF?style=for-the-badge&logo=android&logoColor=black)](https://github.com/abhaysharma000/Matter-Born/raw/main/apk/Matter-Born.apk)
 
 📖 **Full REST API Documentation**: [Read the complete API Reference (API_README.md)](API_README.md)
-📲 **Direct Android APK Download**: [Download Matter-Born.apk](https://github.com/abhaysharma000/Matter-Born/raw/main/Matter-Born.apk)
+📲 **Direct Android APK Download**: [Download Matter-Born.apk](https://github.com/abhaysharma000/Matter-Born/raw/main/apk/Matter-Born.apk)
 🇮🇳 **Hinglish Game Guide**: [Simple Game Guide in Hinglish (README_HINGLISH.md)](README_HINGLISH.md)
 
 ---

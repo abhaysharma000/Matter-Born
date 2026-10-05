@@ -128,7 +128,7 @@ Real-world cheez ka size aur mass robot ke stats decide karta hai:
 ---
 
 ### 📲 Android Phone Par Direct APK Se:
-1. Folder me se **`Matter-Born.apk`** apne phone me transfer karein.
+1. **`apk/`** folder me se **`Matter-Born.apk`** apne phone me transfer karein.
 2. Tap karke **Install** karein.
 3. **Single click me game bina internet ya PC ke bhi pura offline chalega!**
 

@@ -683,6 +683,6 @@ This routes all requests from `http://localhost:3000` inside the phone's Android
 ### 2. Direct 1-Click APK Download
 To distribute or install the latest compiled APK on any Android phone:
 ```text
-https://github.com/abhaysharma000/Matter-Born/raw/main/Matter-Born.apk
+https://github.com/abhaysharma000/Matter-Born/raw/main/apk/Matter-Born.apk
 ```
 This link can be pasted directly into bios, messaging channels, or websites.

@@ -40,19 +40,11 @@ app.get(["/Matter-Born.apk", "/api/download-apk"], (_req, res) => {
   res.setHeader("Content-Type", "application/vnd.android.package-archive");
   res.setHeader("Content-Disposition", 'attachment; filename="Matter-Born.apk"');
 
-  const candidates = [
-    path.join(process.cwd(), "apk", "Matter-Born.apk"),
-    path.join(process.cwd(), "public", "Matter-Born.apk"),
-    path.join(process.cwd(), "dist", "Matter-Born.apk"),
-    path.join(process.cwd(), "Matter-Born.apk")
-  ];
-
-  for (const apkPath of candidates) {
-    if (fs.existsSync(apkPath)) {
-      return res.sendFile(apkPath);
-    }
+  const apkPath = path.join(process.cwd(), "apk", "Matter-Born.apk");
+  if (fs.existsSync(apkPath)) {
+    return res.sendFile(apkPath);
   }
-  res.status(404).send("APK build not found on server.");
+  res.status(404).send("APK build not found in apk/ folder.");
 });
 
 // IP Geolocation fallback endpoint for devices without hardware GPS (e.g. desktops/laptops)
